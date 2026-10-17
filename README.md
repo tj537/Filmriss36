@@ -27,6 +27,16 @@ cargo run            # debug build (dependencies are still optimized → smooth)
 cargo run --release  # maximum performance
 ```
 
+### Install as a Mac app
+
+```bash
+./scripts/install-macos.sh     # builds a release and installs ~/Applications/Filmriss.app
+```
+
+After that, Filmriss starts from Launchpad/Spotlight like any other app and asks for camera access on its
+own. The app is ad-hoc signed (no Apple developer account), so macOS may ask for camera access again after
+each reinstall. Use `FILMRISS_APP_DIR=/Applications ./scripts/install-macos.sh` to install for all users.
+
 On first launch macOS asks for **camera access** – the permission applies to the app you run
 `cargo run` from (Terminal, iTerm, VS Code …). If you denied it by accident:
 *System Settings › Privacy & Security › Camera*. Without a camera an animated test pattern is shown.
