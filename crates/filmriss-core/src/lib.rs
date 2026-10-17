@@ -1,11 +1,11 @@
-//! Filmriss Core – plattformunabhängige Bildlogik.
+//! Filmriss Core – platform-independent image logic.
 //!
-//! Dieses Crate kennt weder Kamera noch GPU. Es liefert:
-//! - [`lut::Lut3D`] – 3D-LUTs (Laden/Speichern im `.cube`-Format, trilineares Sampling)
-//! - [`recipe::FilmRecipe`] – parametrische Filmsimulationen, die zu einer 3D-LUT "gebacken" werden
-//! - [`presets`] – die eingebauten Simulationen
-//! - [`library`] – Verwaltung eingebauter + eigener Simulationen auf der Platte
-//! - [`process`] – CPU-Referenzpipeline (für Fotoaufnahmen und Thumbnails), identisch zum GPU-Shader
+//! This crate knows neither camera nor GPU. It provides:
+//! - [`lut::Lut3D`] – 3D LUTs (load/save in `.cube` format, trilinear sampling)
+//! - [`recipe::FilmRecipe`] – parametric film simulations that are "baked" into a 3D LUT
+//! - [`presets`] – the built-in simulations
+//! - [`library`] – management of built-in + custom simulations on disk
+//! - [`process`] – CPU reference pipeline (for photos and thumbnails), identical to the GPU shader
 
 pub mod color;
 pub mod library;
@@ -19,5 +19,5 @@ pub use lut::Lut3D;
 pub use process::LookParams;
 pub use recipe::FilmRecipe;
 
-/// Standard-Auflösung für gebackene LUTs (33³ ist der Industriestandard).
+/// Default resolution for baked LUTs (33³ is the industry standard).
 pub const DEFAULT_LUT_SIZE: usize = 33;

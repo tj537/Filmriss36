@@ -1,16 +1,16 @@
-//! Haupt-App: Zustand, Bedienlogik und Layout.
+//! Main app: state, interaction logic and layout.
 //!
-//! Layout (Desktop/Tablet quer):
+//! Layout (desktop / tablet landscape):
 //! ┌──────────────────────────────┬───────────┐
-//! │ Topbar                       │ Seiten-   │
+//! │ Top bar                      │ Side      │
 //! ├──────────────────────────────┤ panel     │
-//! │ Live-Preview (GPU)           │ (Look,    │
-//! │  ← wischen → Simulation      │  Rezept,  │
-//! │  halten = Original           │  Kamera,  │
-//! ├──────────────────────────────┤  Hilfe)   │
-//! │ Filmstreifen  ·  Auslöser    │           │
+//! │ Live preview (GPU)           │ (Look,    │
+//! │  ← swipe → simulation        │  Recipe,  │
+//! │  hold = original             │  Camera,  │
+//! ├──────────────────────────────┤  Help)    │
+//! │ Film strip  ·  shutter       │           │
 //! └──────────────────────────────┴───────────┘
-//! Auf schmalen Fenstern (Handy hochkant) wandert das Seitenpanel nach unten.
+//! In narrow windows (phone portrait) the side panel moves to the bottom.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -35,9 +35,9 @@ const PERMISSION_PENDING: u8 = 0;
 const PERMISSION_GRANTED: u8 = 1;
 const PERMISSION_DENIED: u8 = 2;
 
-/// Wischweg (Punkte), ab dem eine Wischgeste die Simulation wechselt.
+/// Swipe distance (points) after which a swipe switches the simulation.
 const SWIPE_THRESHOLD: f32 = 60.0;
-/// So lange (s) muss man auf die Preview drücken, um das Original zu sehen.
+/// How long (s) the preview must be pressed to show the original.
 const HOLD_TO_COMPARE: f64 = 0.25;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -80,7 +80,7 @@ struct Toast {
     error: bool,
 }
 
-/// Zählt Ereignisse der letzten Sekunde (für FPS-Anzeigen).
+/// Counts events within the last second (for FPS displays).
 #[derive(Default)]
 struct Rate(VecDeque<f64>);
 
@@ -100,7 +100,7 @@ pub struct FilmrissApp {
     settings: Settings,
     paths: Option<Paths>,
     library: Library,
-    /// Rezepte wie zuletzt geladen – für "geändert"-Markierung und "Zurücksetzen".
+    /// Recipes as last loaded – for the "modified" marker and "Reset".
     pristine: Vec<FilmRecipe>,
     current: usize,
     tab: Tab,
@@ -145,7 +145,7 @@ impl FilmrissApp {
         let rs = cc
             .wgpu_render_state
             .as_ref()
-            .context("wgpu ist nicht verfügbar – Filmriss braucht eine GPU (Metal/Vulkan/DX12/GL)")?;
+            .context("wgpu is not available – Filmriss needs a GPU (Metal/Vulkan/DX12/GL)")?;
         PreviewResources::install(rs);
         let info = rs.adapter.get_info();
         let gpu_info = format!("{} ({:?})", info.name, info.backend);
@@ -159,10 +159,10 @@ impl FilmrissApp {
         let paths = Paths::discover();
         if let Some(p) = &paths {
             if let Err(e) = p.ensure_exist() {
-                log::warn!("Ordner konnten nicht angelegt werden: {e}");
+                log::warn!("could not create folders: {e}");
             }
             log::info!(
-                "Rezepte: {}  LUTs: {}  Fotos: {}",
+                "Recipes: {}  LUTs: {}  Photos: {}",
                 p.recipes.display(),
                 p.luts.display(),
                 p.captures.display()
@@ -227,7 +227,7 @@ impl FilmrissApp {
         Ok(app)
     }
 
-    // ── Bibliothek ────────────────────────────────────────────────────────────
+    // ── Library ──────────────────────────────────────────────────────────────
 
     fn reload_library(&mut self, select: Option<String>, now: f64) {
         let wanted = select.or_else(|| self.library.simulations.get(self.current).map(|s| s.name().to_owned()));
@@ -270,7 +270,7 @@ impl FilmrissApp {
 
     fn save_recipe(&mut self, as_new: bool, now: f64) {
         let Some(paths) = self.paths.clone() else {
-            self.toast("Kein Speicherort verfügbar".into(), true, now);
+            self.toast("No storage location available".into(), true, now);
             return;
         };
         let sim = &self.library.simulations[self.current];
@@ -282,21 +282,21 @@ impl FilmrissApp {
         if as_new {
             let name = self.save_name.trim();
             recipe.name = if name.is_empty() || name == sim.name() {
-                format!("{} (eigen)", sim.name())
+                format!("{} (custom)", sim.name())
             } else {
                 name.to_owned()
             };
         }
         match Library::save_recipe(&paths, &recipe, existing.as_deref()) {
             Ok(path) => {
-                self.toast(format!("Gespeichert: {}", path.display()), false, now);
-                // Änderungen an der Vorlage nicht stillschweigend mitnehmen
+                self.toast(format!("Saved: {}", path.display()), false, now);
+                // Don't silently keep the edits on the template
                 if as_new {
                     self.library.simulations[self.current].recipe = self.pristine[self.current].clone();
                 }
                 self.reload_library(Some(recipe.name), now);
             }
-            Err(e) => self.toast(format!("Speichern fehlgeschlagen: {e}"), true, now),
+            Err(e) => self.toast(format!("Saving failed: {e}"), true, now),
         }
     }
 
@@ -311,11 +311,11 @@ impl FilmrissApp {
         if let Origin::UserRecipe(path) = &self.library.simulations[self.current].origin {
             match std::fs::remove_file(path) {
                 Ok(()) => {
-                    self.toast("Rezept gelöscht".into(), false, now);
+                    self.toast("Recipe deleted".into(), false, now);
                     let fallback = self.library.simulations[0].name().to_owned();
                     self.reload_library(Some(fallback), now);
                 }
-                Err(e) => self.toast(format!("Löschen fehlgeschlagen: {e}"), true, now),
+                Err(e) => self.toast(format!("Deleting failed: {e}"), true, now),
             }
         }
         self.confirm_delete = false;
@@ -324,12 +324,12 @@ impl FilmrissApp {
     fn export_cube(&mut self, now: f64) {
         let Some(paths) = &self.paths else { return };
         match Library::export_cube(paths, &self.library.simulations[self.current]) {
-            Ok(path) => self.toast(format!("LUT exportiert: {}", path.display()), false, now),
-            Err(e) => self.toast(format!("Export fehlgeschlagen: {e}"), true, now),
+            Ok(path) => self.toast(format!("LUT exported: {}", path.display()), false, now),
+            Err(e) => self.toast(format!("Export failed: {e}"), true, now),
         }
     }
 
-    // ── Kamera ───────────────────────────────────────────────────────────────
+    // ── Camera ───────────────────────────────────────────────────────────────
 
     fn ensure_camera(&mut self, ctx: &egui::Context, now: f64) {
         if self.camera_started {
@@ -342,7 +342,7 @@ impl FilmrissApp {
         self.camera_started = true;
         if permission == PERMISSION_DENIED {
             self.toast(
-                "Kein Kamerazugriff – Testbild aktiv. Freigabe unter Systemeinstellungen › Datenschutz › Kamera."
+                "No camera access – test pattern active. Allow it under System Settings › Privacy & Security › Camera."
                     .into(),
                 true,
                 now,
@@ -363,8 +363,8 @@ impl FilmrissApp {
     }
 
     fn open_camera(&mut self, desc: CameraDescriptor, ctx: &egui::Context) {
-        log::info!("Öffne Kamera: {}", desc.name);
-        // Alten Stream zuerst schließen, damit das Gerät frei ist.
+        log::info!("Opening camera: {}", desc.name);
+        // Close the old stream first so the device is released.
         self.stream = None;
         let ctx = ctx.clone();
         let notify: Notify = Arc::new(move || ctx.request_repaint());
@@ -382,7 +382,7 @@ impl FilmrissApp {
                 frame: Arc::new(frame),
             };
             if let Some(old) = self.frame.replace(new) {
-                // Puffer zurückgeben, wenn ihn niemand mehr hält (z. B. eine laufende Aufnahme).
+                // Return the buffer unless someone still holds it (e.g. a running capture).
                 if let Ok(f) = Arc::try_unwrap(old.frame) {
                     stream.recycle(f.data);
                 }
@@ -403,22 +403,22 @@ impl FilmrissApp {
             .is_none_or(|s| s.descriptor().id == CameraId::TestPattern)
     }
 
-    // ── Aufnahme ─────────────────────────────────────────────────────────────
+    // ── Capture ──────────────────────────────────────────────────────────────
 
     fn capture(&mut self, ctx: &egui::Context, now: f64) {
         let Some(frame) = &self.frame else {
-            self.toast("Noch kein Kamerabild".into(), true, now);
+            self.toast("No camera frame yet".into(), true, now);
             return;
         };
         let Some(paths) = &self.paths else {
-            self.toast("Kein Speicherort verfügbar".into(), true, now);
+            self.toast("No storage location available".into(), true, now);
             return;
         };
         let sim = &self.library.simulations[self.current];
         let job = CaptureJob {
             frame: frame.frame.clone(),
             lut: sim.lut.clone(),
-            // Gleicher Seed wie in der Preview → identisches Korn
+            // Same seed as the preview → identical grain
             params: sim.look_params(self.settings.intensity, frame.id as u32),
             simulation: sim.name().to_owned(),
             dir: paths.captures.clone(),
@@ -437,12 +437,12 @@ impl FilmrissApp {
                     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
                     self.toast(format!("📷 {name}"), false, now);
                 }
-                Err(e) => self.toast(format!("Foto fehlgeschlagen: {e}"), true, now),
+                Err(e) => self.toast(format!("Photo failed: {e}"), true, now),
             }
         }
     }
 
-    // ── Hilfsfunktionen ──────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     fn toast(&mut self, text: String, error: bool, now: f64) {
         if error {
@@ -464,8 +464,8 @@ impl FilmrissApp {
             self.compare_button_down = false;
             return;
         }
-        // Pfeile/Leertaste/Enter gehören der App: verbrauchen, damit egui damit nicht den
-        // Fokus verschiebt oder einen fokussierten Button ein zweites Mal auslöst.
+        // Arrows/Space/Enter belong to the app: consume them so egui doesn't move focus
+        // with them or trigger a focused button a second time.
         let (prev, next, shoot, info, split, mirror, hide, panel, full, compare) = ctx.input_mut(|i| {
             let none = egui::Modifiers::NONE;
             (
@@ -561,11 +561,11 @@ impl eframe::App for FilmrissApp {
     }
 }
 
-// ── UI-Teile ─────────────────────────────────────────────────────────────────
+// ── UI parts ─────────────────────────────────────────────────────────────────
 
 impl FilmrissApp {
     fn top_bar(&mut self, ui: &mut Ui) {
-        // Auf schmalen Displays nur Icons, damit nichts überlappt
+        // Icons only on narrow displays so nothing overlaps
         let compact = ui.available_width() < 620.0;
         ui.horizontal(|ui| {
             ui.label(RichText::new("FILMRISS").color(ACCENT).strong().size(18.0));
@@ -577,27 +577,27 @@ impl FilmrissApp {
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 let pick = |full: &'static str, short: &'static str| if compact { short } else { full };
                 let panel_label = if self.settings.panel_open {
-                    pick("⚙ ausblenden", "⚙")
+                    pick("⚙ Hide", "⚙")
                 } else {
-                    pick("⚙ Einstellungen", "⚙")
+                    pick("⚙ Settings", "⚙")
                 };
                 if ui
                     .selectable_label(self.settings.panel_open, panel_label)
-                    .on_hover_text("Seitenpanel (P)")
+                    .on_hover_text("Side panel (P)")
                     .clicked()
                 {
                     self.settings.panel_open ^= true;
                 }
                 if ui
-                    .selectable_label(self.split_mode, pick("◑ Vergleich", "◑"))
-                    .on_hover_text("Geteilte Ansicht (S)")
+                    .selectable_label(self.split_mode, pick("◑ Compare", "◑"))
+                    .on_hover_text("Split view (S)")
                     .clicked()
                 {
                     self.split_mode ^= true;
                 }
                 if ui
                     .selectable_label(self.settings.show_info, pick("ℹ Info", "ℹ"))
-                    .on_hover_text("Technische Infos (I)")
+                    .on_hover_text("Technical info (I)")
                     .clicked()
                 {
                     self.settings.show_info ^= true;
@@ -627,7 +627,7 @@ impl FilmrissApp {
         }
 
         ui.add_space(6.0);
-        // Schmal (Handy hochkant): Stärke-Regler in eigener Zeile über dem Auslöser
+        // Narrow (phone portrait): strength slider on its own row above the shutter
         let narrow = ui.available_width() < 560.0;
         if narrow {
             self.intensity_slider(ui);
@@ -645,8 +645,8 @@ impl FilmrissApp {
                 }
             });
             cols[2].with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let resp = ui.add(egui::Button::new("👁 Vorher").sense(Sense::click_and_drag()));
-                let resp = resp.on_hover_text("Gedrückt halten zeigt das Original (Taste C)");
+                let resp = ui.add(egui::Button::new("👁 Before").sense(Sense::click_and_drag()));
+                let resp = resp.on_hover_text("Hold to show the original (key C)");
                 if resp.is_pointer_button_down_on() {
                     self.compare_button_down = true;
                 }
@@ -656,11 +656,11 @@ impl FilmrissApp {
 
     fn intensity_slider(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Stärke").color(TEXT_DIM));
+            ui.label(RichText::new("Strength").color(TEXT_DIM));
             let mut pct = self.settings.intensity * 100.0;
             ui.style_mut().spacing.slider_width = (ui.available_width() - 80.0).clamp(60.0, 220.0);
             let slider = egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0);
-            let resp = ui.add(slider).on_hover_text("Doppelklick: 100 %");
+            let resp = ui.add(slider).on_hover_text("Double-click: 100 %");
             if resp.double_clicked() {
                 self.settings.intensity = 1.0;
             } else if resp.changed() {
@@ -721,9 +721,9 @@ impl FilmrissApp {
                 self.permission.load(Ordering::SeqCst),
                 self.stream.as_ref().map(|s| s.state()),
             ) {
-                (PERMISSION_PENDING, _) => "Warte auf Kamera-Freigabe …".to_owned(),
-                (_, Some(StreamState::Failed(e))) => format!("Kamera-Fehler:\n{e}"),
-                _ => "Kamera startet …".to_owned(),
+                (PERMISSION_PENDING, _) => "Waiting for camera permission …".to_owned(),
+                (_, Some(StreamState::Failed(e))) => format!("Camera error:\n{e}"),
+                _ => "Camera starting …".to_owned(),
             };
             painter.text(
                 avail.center(),
@@ -734,7 +734,7 @@ impl FilmrissApp {
             );
             if matches!(self.stream.as_ref().map(|s| s.state()), Some(StreamState::Failed(_))) {
                 let btn = Rect::from_center_size(avail.center() + Vec2::new(0.0, 60.0), Vec2::new(200.0, 40.0));
-                if ui.put(btn, egui::Button::new("Testbild verwenden")).clicked() {
+                if ui.put(btn, egui::Button::new("Use test pattern")).clicked() {
                     let ctx = ui.ctx().clone();
                     self.open_camera(CameraDescriptor::test_pattern(), &ctx);
                 }
@@ -743,7 +743,7 @@ impl FilmrissApp {
             return;
         };
 
-        // Bild einpassen (Seitenverhältnis erhalten)
+        // Fit the image (keep aspect ratio)
         let aspect = frame.frame.width as f32 / frame.frame.height as f32;
         let mut size = avail.size();
         if size.x / size.y > aspect {
@@ -753,7 +753,7 @@ impl FilmrissApp {
         }
         let rect = Rect::from_center_size(avail.center(), size);
 
-        // ── Gesten ──
+        // ── Gestures ──
         let mut split = 0.0;
         if self.split_mode {
             if let Some(pos) = resp.interact_pointer_pos()
@@ -790,7 +790,7 @@ impl FilmrissApp {
         if resp.double_clicked() {
             self.immersive ^= true;
         }
-        // Trackpad: horizontales Zwei-Finger-Wischen wechselt die Simulation
+        // Trackpad: horizontal two-finger swipe switches the simulation
         if resp.hovered() {
             let dx = ui.ctx().input(|i| i.smooth_scroll_delta.x);
             if dx == 0.0 {
@@ -805,7 +805,7 @@ impl FilmrissApp {
             }
         }
 
-        // ── GPU-Preview ──
+        // ── GPU preview ──
         let sim = &self.library.simulations[self.current];
         let uniforms = Uniforms {
             intensity: self.settings.intensity,
@@ -894,7 +894,7 @@ impl FilmrissApp {
                 _ => String::new(),
             };
             let text = format!(
-                "{cam}  ·  {}×{}  {fmt}\nKamera {} fps  ·  UI {} fps\nGPU {}\nLUT {}³  ·  Bild #{}",
+                "{cam}  ·  {}×{}  {fmt}\nCamera {} fps  ·  UI {} fps\nGPU {}\nLUT {}³  ·  Frame #{}",
                 f.width,
                 f.height,
                 self.cam_rate.per_sec(),
@@ -950,9 +950,9 @@ impl FilmrissApp {
     fn side_panel(&mut self, ui: &mut Ui, now: f64) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.tab, Tab::Look, "Look");
-            ui.selectable_value(&mut self.tab, Tab::Recipe, "Rezept");
-            ui.selectable_value(&mut self.tab, Tab::Camera, "Kamera");
-            ui.selectable_value(&mut self.tab, Tab::Help, "Hilfe");
+            ui.selectable_value(&mut self.tab, Tab::Recipe, "Recipe");
+            ui.selectable_value(&mut self.tab, Tab::Camera, "Camera");
+            ui.selectable_value(&mut self.tab, Tab::Help, "Help");
         });
         ui.separator();
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| match self.tab {
@@ -994,30 +994,26 @@ impl FilmrissApp {
 
         ui.add_space(8.0);
         ui.separator();
-        ui.checkbox(&mut self.settings.mirror, "Vorschau spiegeln (Selfie)");
-        ui.checkbox(&mut self.settings.save_original, "Original zusätzlich speichern");
-        ui.checkbox(&mut self.settings.show_info, "Technische Infos einblenden");
+        ui.checkbox(&mut self.settings.mirror, "Mirror preview (selfie)");
+        ui.checkbox(&mut self.settings.save_original, "Also save the original");
+        ui.checkbox(&mut self.settings.show_info, "Show technical info");
         ui.add_space(8.0);
         if ui
-            .button("↻ Bibliothek neu laden")
-            .on_hover_text("Liest Rezepte und .cube-Dateien neu ein")
+            .button("↻ Reload library")
+            .on_hover_text("Re-reads recipes and .cube files")
             .clicked()
         {
             self.reload_library(None, now);
         }
         if let Some(paths) = &self.paths {
             ui.horizontal_wrapped(|ui| {
-                if ui
-                    .button("📁 LUTs")
-                    .on_hover_text(".cube-Dateien hier ablegen")
-                    .clicked()
-                {
+                if ui.button("📁 LUTs").on_hover_text("Put .cube files here").clicked() {
                     open_folder(&paths.luts);
                 }
-                if ui.button("📁 Rezepte").clicked() {
+                if ui.button("📁 Recipes").clicked() {
                     open_folder(&paths.recipes);
                 }
-                if ui.button("📁 Fotos").clicked() {
+                if ui.button("📁 Photos").clicked() {
                     open_folder(&paths.captures);
                 }
             });
@@ -1030,11 +1026,11 @@ impl FilmrissApp {
         ui.horizontal(|ui| {
             ui.heading(sim.recipe.name.clone());
             if modified {
-                ui.label(RichText::new("• geändert").color(ACCENT));
+                ui.label(RichText::new("• modified").color(ACCENT));
             }
         });
         ui.label(
-            RichText::new("Änderungen wirken sofort live. Doppelklick auf einen Regler setzt ihn zurück.")
+            RichText::new("Changes apply live. Double-click a slider to reset it.")
                 .color(TEXT_DIM)
                 .small(),
         );
@@ -1048,35 +1044,35 @@ impl FilmrissApp {
         ui.add_space(10.0);
         ui.separator();
         let is_user = matches!(self.library.simulations[self.current].origin, Origin::UserRecipe(_));
-        ui.label(RichText::new("Speichern").strong());
+        ui.label(RichText::new("Save").strong());
         ui.horizontal(|ui| {
             ui.label("Name");
             ui.add(egui::TextEdit::singleline(&mut self.save_name).desired_width(f32::INFINITY));
         });
         ui.horizontal_wrapped(|ui| {
-            if is_user && ui.add_enabled(modified, egui::Button::new("💾 Speichern")).clicked() {
+            if is_user && ui.add_enabled(modified, egui::Button::new("💾 Save")).clicked() {
                 self.save_recipe(false, now);
             }
-            if ui.button("➕ Als neue Simulation").clicked() {
+            if ui.button("➕ Save as new simulation").clicked() {
                 self.save_recipe(true, now);
             }
-            if ui.add_enabled(modified, egui::Button::new("↺ Zurücksetzen")).clicked() {
+            if ui.add_enabled(modified, egui::Button::new("↺ Reset")).clicked() {
                 self.reset_recipe();
             }
         });
         ui.horizontal_wrapped(|ui| {
             if ui
-                .button("📤 Als .cube exportieren")
-                .on_hover_text("Für Lightroom, Photoshop, Resolve, Final Cut …")
+                .button("📤 Export as .cube")
+                .on_hover_text("For Lightroom, Photoshop, Resolve, Final Cut …")
                 .clicked()
             {
                 self.export_cube(now);
             }
             if is_user {
                 let label = if self.confirm_delete {
-                    "Wirklich löschen?"
+                    "Really delete?"
                 } else {
-                    "🗑 Löschen"
+                    "🗑 Delete"
                 };
                 if ui
                     .button(RichText::new(label).color(Color32::from_rgb(255, 140, 130)))
@@ -1112,7 +1108,7 @@ impl FilmrissApp {
             let ctx = ui.ctx().clone();
             self.open_camera(cam, &ctx);
         }
-        if ui.button("↻ Kameras neu suchen").clicked() {
+        if ui.button("↻ Rescan cameras").clicked() {
             self.camera_started = false;
             self.stream = None;
             let ctx = ui.ctx().clone();
@@ -1121,41 +1117,41 @@ impl FilmrissApp {
         ui.add_space(8.0);
         if let Some(stream) = &self.stream {
             let state = match stream.state() {
-                StreamState::Starting => "startet …".to_owned(),
-                StreamState::Running { width, height, format } => format!("läuft – {width}×{height}, {format}"),
-                StreamState::Failed(e) => format!("Fehler: {e}"),
+                StreamState::Starting => "starting …".to_owned(),
+                StreamState::Running { width, height, format } => format!("running – {width}×{height}, {format}"),
+                StreamState::Failed(e) => format!("error: {e}"),
             };
             ui.label(RichText::new(format!("Status: {state}")).color(TEXT_DIM));
         }
-        ui.checkbox(&mut self.settings.mirror, "Vorschau spiegeln (Selfie)");
+        ui.checkbox(&mut self.settings.mirror, "Mirror preview (selfie)");
     }
 
     fn tab_help(&mut self, ui: &mut Ui) {
-        ui.label(RichText::new("Gesten").strong());
+        ui.label(RichText::new("Gestures").strong());
         for line in [
-            "Wischen links/rechts – Simulation wechseln",
-            "Trackpad: zwei Finger seitlich – Simulation wechseln",
-            "Gedrückt halten – Original zeigen",
-            "Doppeltippen – Bedienelemente aus-/einblenden",
+            "Swipe left/right – switch simulation",
+            "Trackpad: two-finger sideways swipe – switch simulation",
+            "Press and hold – show original",
+            "Double-tap – hide/show controls",
         ] {
             ui.label(format!("• {line}"));
         }
         ui.add_space(8.0);
-        ui.label(RichText::new("Tastatur").strong());
+        ui.label(RichText::new("Keyboard").strong());
         egui::Grid::new("keys")
             .num_columns(2)
             .spacing([16.0, 4.0])
             .show(ui, |ui| {
                 for (k, d) in [
-                    ("← / →", "Simulation wechseln"),
-                    ("Leertaste", "Foto aufnehmen"),
-                    ("C (halten)", "Original zeigen"),
-                    ("S", "Geteilte Ansicht"),
-                    ("I", "Technische Infos"),
-                    ("M", "Spiegeln"),
-                    ("P", "Seitenpanel"),
-                    ("H", "Alles ausblenden"),
-                    ("F", "Vollbild"),
+                    ("← / →", "Switch simulation"),
+                    ("Space", "Take photo"),
+                    ("C (hold)", "Show original"),
+                    ("S", "Split view"),
+                    ("I", "Technical info"),
+                    ("M", "Mirror"),
+                    ("P", "Side panel"),
+                    ("H", "Hide everything"),
+                    ("F", "Fullscreen"),
                 ] {
                     ui.monospace(k);
                     ui.label(d);
@@ -1164,15 +1160,15 @@ impl FilmrissApp {
             });
         if let Some(p) = &self.paths {
             ui.add_space(8.0);
-            ui.label(RichText::new("Ordner").strong());
+            ui.label(RichText::new("Folders").strong());
             for (name, path) in [
-                ("Fotos", &p.captures),
-                ("Rezepte", &p.recipes),
+                ("Photos", &p.captures),
+                ("Recipes", &p.recipes),
                 ("LUTs", &p.luts),
-                ("Exporte", &p.exports),
+                ("Exports", &p.exports),
             ] {
                 ui.horizontal(|ui| {
-                    if ui.small_button("öffnen").clicked() {
+                    if ui.small_button("open").clicked() {
                         open_folder(path);
                     }
                     ui.label(
@@ -1201,7 +1197,7 @@ fn shutter_button(ui: &mut Ui, busy: bool) -> egui::Response {
         Color32::WHITE
     };
     painter.circle_filled(c, inner, fill);
-    resp.on_hover_text("Foto aufnehmen (Leertaste)")
+    resp.on_hover_text("Take photo (Space)")
 }
 
 fn label(painter: &egui::Painter, pos: egui::Pos2, align: Align2, text: &str) {
@@ -1213,9 +1209,9 @@ fn label(painter: &egui::Painter, pos: egui::Pos2, align: Align2, text: &str) {
 
 fn origin_label(origin: &Origin) -> String {
     match origin {
-        Origin::BuiltIn => "Eingebaute Simulation".into(),
+        Origin::BuiltIn => "Built-in simulation".into(),
         Origin::UserRecipe(p) => format!(
-            "Eigenes Rezept · {}",
+            "Custom recipe · {}",
             p.file_name().unwrap_or_default().to_string_lossy()
         ),
         Origin::CubeFile(p) => format!("3D-LUT · {}", p.file_name().unwrap_or_default().to_string_lossy()),
@@ -1231,6 +1227,6 @@ fn open_folder(path: &Path) {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let cmd = "xdg-open";
     if let Err(e) = std::process::Command::new(cmd).arg(path).spawn() {
-        log::warn!("Ordner konnte nicht geöffnet werden: {e}");
+        log::warn!("could not open folder: {e}");
     }
 }

@@ -1,12 +1,12 @@
-//! GPU-Live-Preview: Kamerabild + 3D-LUT direkt in egui's Render-Pass zeichnen.
+//! GPU live preview: draw camera frame + 3D LUT directly in egui's render pass.
 //!
-//! Ablauf pro Frame:
-//! 1. `prepare`: neues Kamerabild (falls vorhanden) in eine 2D-Textur laden, bei
-//!    Simulationswechsel die LUT in eine 3D-Textur (RGBA16F) laden, Uniforms schreiben.
-//! 2. `paint`: ein einziges Dreieck – der Fragment-Shader erledigt den Rest.
+//! Per frame:
+//! 1. `prepare`: upload the new camera frame (if any) into a 2D texture, upload the LUT
+//!    into a 3D texture (RGBA16F) when the simulation changes, write the uniforms.
+//! 2. `paint`: a single triangle – the fragment shader does the rest.
 //!
-//! Die GPU-Arbeit pro Pixel ist konstant (1 Kamera-Sample + 1 LUT-Sample + etwas
-//! Arithmetik), egal wie komplex die Filmsimulation ist.
+//! The GPU work per pixel is constant (1 camera sample + 1 LUT sample + a little
+//! arithmetic), no matter how complex the film simulation is.
 
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ pub struct Uniforms {
     pub _pad: f32,
 }
 
-/// Ein Kamerabild plus app-weit eindeutige ID (Bildnummern starten pro Stream neu).
+/// A camera frame plus an app-wide unique ID (frame numbers restart per stream).
 #[derive(Clone)]
 pub struct PreviewFrame {
     pub id: u64,
@@ -52,7 +52,7 @@ pub struct PreviewResources {
 }
 
 impl PreviewResources {
-    /// Legt Pipeline & Co. an und registriert sie bei egui-wgpu.
+    /// Creates the pipeline & co. and registers them with egui-wgpu.
     pub fn install(rs: &egui_wgpu::RenderState) {
         let device = &rs.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -179,7 +179,7 @@ impl PreviewResources {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                // Bewusst *nicht* Srgb: Shader und LUT arbeiten auf sRGB-kodierten Werten.
+                // Deliberately *not* Srgb: shader and LUT operate on sRGB-encoded values.
                 format: wgpu::TextureFormat::Rgba8Unorm,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
@@ -287,7 +287,7 @@ impl PreviewResources {
     }
 }
 
-/// Paint-Callback, der pro egui-Frame erzeugt wird.
+/// Paint callback created for every egui frame.
 pub struct PreviewCallback {
     pub frame: PreviewFrame,
     pub lut: Arc<Lut3D>,

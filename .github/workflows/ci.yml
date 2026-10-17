@@ -18,10 +18,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Linux-Abhängigkeiten
+      - name: Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libclang-dev libv4l-dev libxkbcommon-dev libwayland-dev
-      - name: Tests (Kern)
+      - name: Tests (core)
         run: cargo test -p filmriss-core
-      - name: Build (App)
+      - name: Build (app)
         run: cargo build --workspace

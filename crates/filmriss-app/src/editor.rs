@@ -1,6 +1,6 @@
-//! Rezept-Editor: alle Parameter einer Filmsimulation als Regler.
-//! Jede Änderung wird sofort neu gebacken (~1 ms) und ist live in der Preview sichtbar.
-//! Doppelklick/Doppeltipp auf einen Regler setzt ihn zurück.
+//! Recipe editor: every parameter of a film simulation as a slider.
+//! Each change is re-baked immediately (~1 ms) and visible live in the preview.
+//! Double-click/double-tap a slider to reset it.
 
 use egui::{CollapsingHeader, Color32, RichText, Slider, Ui};
 use filmriss_core::FilmRecipe;
@@ -9,38 +9,38 @@ use filmriss_core::recipe::{HueAdjustments, Tone};
 
 use crate::style::TEXT_DIM;
 
-/// Zeigt den Editor; `true`, wenn sich das Rezept geändert hat.
+/// Shows the editor; `true` if the recipe changed.
 pub fn show(ui: &mut Ui, r: &mut FilmRecipe) -> bool {
     let mut changed = false;
 
-    section(ui, "Belichtung & Weißabgleich", true, |ui| {
-        changed |= slider(ui, "Belichtung (EV)", &mut r.exposure, -2.0..=2.0, 0.0);
-        changed |= slider(ui, "Temperatur", &mut r.temperature, -1.0..=1.0, 0.0);
-        changed |= slider(ui, "Tönung", &mut r.tint, -1.0..=1.0, 0.0);
+    section(ui, "Exposure & white balance", true, |ui| {
+        changed |= slider(ui, "Exposure (EV)", &mut r.exposure, -2.0..=2.0, 0.0);
+        changed |= slider(ui, "Temperature", &mut r.temperature, -1.0..=1.0, 0.0);
+        changed |= slider(ui, "Tint", &mut r.tint, -1.0..=1.0, 0.0);
     });
 
-    section(ui, "Tonwerte", true, |ui| {
-        changed |= slider(ui, "Kontrast", &mut r.contrast, -1.0..=1.0, 0.0);
-        changed |= slider(ui, "Lichter", &mut r.highlights, -1.0..=1.0, 0.0);
-        changed |= slider(ui, "Schatten", &mut r.shadows, -1.0..=1.0, 0.0);
-        changed |= slider(ui, "Fade (Schwarz)", &mut r.fade, 0.0..=1.0, 0.0);
+    section(ui, "Tones", true, |ui| {
+        changed |= slider(ui, "Contrast", &mut r.contrast, -1.0..=1.0, 0.0);
+        changed |= slider(ui, "Highlights", &mut r.highlights, -1.0..=1.0, 0.0);
+        changed |= slider(ui, "Shadows", &mut r.shadows, -1.0..=1.0, 0.0);
+        changed |= slider(ui, "Fade (blacks)", &mut r.fade, 0.0..=1.0, 0.0);
     });
 
-    section(ui, "Farbe", true, |ui| {
-        changed |= ui.checkbox(&mut r.monochrome, "Schwarzweiß").changed();
+    section(ui, "Color", true, |ui| {
+        changed |= ui.checkbox(&mut r.monochrome, "Black & white").changed();
         if r.monochrome {
-            ui.label(RichText::new("Kanalmischer (Farbfilter)").color(TEXT_DIM).small());
+            ui.label(RichText::new("Channel mixer (color filter)").color(TEXT_DIM).small());
             let default = FilmRecipe::default().mono_mix;
-            for (i, name) in ["Rot", "Grün", "Blau"].iter().enumerate() {
+            for (i, name) in ["Red", "Green", "Blue"].iter().enumerate() {
                 changed |= slider(ui, name, &mut r.mono_mix[i], -0.5..=1.5, default[i]);
             }
         } else {
-            changed |= slider(ui, "Sättigung", &mut r.saturation, -1.0..=1.0, 0.0);
+            changed |= slider(ui, "Saturation", &mut r.saturation, -1.0..=1.0, 0.0);
         }
     });
 
     if !r.monochrome {
-        section(ui, "Farbbereiche", false, |ui| {
+        section(ui, "Color ranges", false, |ui| {
             for (i, band) in r.hues.bands_mut().into_iter().enumerate() {
                 let swatch = oklch_color(0.7, 0.13, HueAdjustments::CENTERS[i]);
                 ui.horizontal(|ui| {
@@ -48,22 +48,22 @@ pub fn show(ui: &mut Ui, r: &mut FilmRecipe) -> bool {
                     ui.painter().circle_filled(rect.center(), 6.0, swatch);
                     ui.strong(HueAdjustments::NAMES[i]);
                 });
-                changed |= slider(ui, "Farbton", &mut band.hue, -30.0..=30.0, 0.0);
-                changed |= slider(ui, "Sättigung", &mut band.saturation, -1.0..=1.0, 0.0);
-                changed |= slider(ui, "Helligkeit", &mut band.lightness, -1.0..=1.0, 0.0);
+                changed |= slider(ui, "Hue", &mut band.hue, -30.0..=30.0, 0.0);
+                changed |= slider(ui, "Saturation", &mut band.saturation, -1.0..=1.0, 0.0);
+                changed |= slider(ui, "Lightness", &mut band.lightness, -1.0..=1.0, 0.0);
                 ui.add_space(4.0);
             }
         });
     }
 
-    section(ui, "Split-Toning", false, |ui| {
-        changed |= tone(ui, "Schatten", &mut r.shadow_tone);
-        changed |= tone(ui, "Lichter", &mut r.highlight_tone);
+    section(ui, "Split toning", false, |ui| {
+        changed |= tone(ui, "Shadows", &mut r.shadow_tone);
+        changed |= tone(ui, "Highlights", &mut r.highlight_tone);
     });
 
-    section(ui, "Korn & Vignette", true, |ui| {
-        changed |= slider(ui, "Korn", &mut r.grain, 0.0..=1.0, 0.0);
-        changed |= slider(ui, "Korngröße", &mut r.grain_size, 0.75..=4.0, 1.5);
+    section(ui, "Grain & vignette", true, |ui| {
+        changed |= slider(ui, "Grain", &mut r.grain, 0.0..=1.0, 0.0);
+        changed |= slider(ui, "Grain size", &mut r.grain_size, 0.75..=4.0, 1.5);
         changed |= slider(ui, "Vignette", &mut r.vignette, -1.0..=1.0, 0.0);
     });
 
@@ -93,8 +93,8 @@ fn tone(ui: &mut Ui, label: &str, tone: &mut Tone) -> bool {
         ui.painter().circle_filled(rect.center(), 6.0, color);
         ui.strong(label);
     });
-    changed |= slider(ui, "Farbton °", &mut tone.hue, 0.0..=360.0, 0.0);
-    changed |= slider(ui, "Stärke", &mut tone.strength, 0.0..=1.0, 0.0);
+    changed |= slider(ui, "Hue °", &mut tone.hue, 0.0..=360.0, 0.0);
+    changed |= slider(ui, "Strength", &mut tone.strength, 0.0..=1.0, 0.0);
     changed
 }
 

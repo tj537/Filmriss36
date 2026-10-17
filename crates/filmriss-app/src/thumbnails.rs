@@ -1,6 +1,6 @@
-//! Mini-Vorschaubilder für den Filmstreifen: das aktuelle Kamerabild mit jeder
-//! Simulation. Läuft auf der CPU (winzige Bilder, < 2 ms für alle) und wird nur
-//! etwa einmal pro Sekunde aktualisiert.
+//! Mini previews for the film strip: the current camera frame with every
+//! simulation. Runs on the CPU (tiny images, < 2 ms for all of them) and is only
+//! refreshed about once per second.
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use filmriss_core::{LookParams, Simulation, process};
@@ -43,7 +43,7 @@ impl Thumbnails {
         self.textures.truncate(sims.len());
         for (i, sim) in sims.iter().enumerate() {
             let mut img = small.clone();
-            // Korn wäre bei dieser Größe nur Rauschen – Vignette und Farben reichen.
+            // Grain would just be noise at this size – vignette and colors are enough.
             let params = LookParams {
                 grain: 0.0,
                 ..sim.look_params(1.0, 0)

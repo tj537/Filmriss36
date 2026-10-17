@@ -1,5 +1,5 @@
-name = "Kino Flach"
-description = "Sehr flacher, entsättigter Kinofilm-Look mit kühlen Schatten (vgl. Eterna)."
+name = "Flat Cinema"
+description = "Very flat, desaturated motion-picture look with cool shadows (cf. Eterna)."
 contrast = -0.35
 highlights = -0.2
 shadows = 0.15

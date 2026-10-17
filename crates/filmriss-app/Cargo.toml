@@ -1,6 +1,6 @@
 [package]
 name = "filmriss-app"
-description = "Filmriss – Kamera-App mit Live-Filmsimulationen"
+description = "Filmriss – camera app with live film simulations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -24,7 +24,7 @@ half.workspace = true
 image.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
-# Native Kameras (nokhwa) überall außer Android – dort kommt später ein Camera2-Backend.
+# Native cameras (nokhwa) everywhere except Android – a Camera2 backend will follow there.
 [target.'cfg(not(target_os = "android"))'.dependencies]
 filmriss-camera = { workspace = true, features = ["native"] }
 

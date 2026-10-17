@@ -1,8 +1,8 @@
-//! Farbraum-Hilfsfunktionen: sRGB-Transferkurve und Oklab.
+//! Color space helpers: sRGB transfer curve and Oklab.
 //!
-//! Oklab (Björn Ottosson, 2020) ist ein wahrnehmungsnaher Farbraum: Helligkeit (L),
-//! Chroma und Farbton lassen sich darin getrennt manipulieren, ohne dass Farben
-//! "kippen". Ideal für Filmlooks (Sättigung pro Farbton, Split-Toning, Tonkurven).
+//! Oklab (Björn Ottosson, 2020) is a perceptual color space: lightness (L),
+//! chroma and hue can be manipulated independently without colors "drifting".
+//! Ideal for film looks (per-hue saturation, split toning, tone curves).
 
 #[inline]
 pub fn srgb_to_linear(c: f32) -> f32 {
@@ -32,7 +32,7 @@ pub fn linear_to_srgb3(c: [f32; 3]) -> [f32; 3] {
     c.map(|v| linear_to_srgb(v.max(0.0)))
 }
 
-/// Relative Luminanz (Rec. 709 / sRGB-Primärfarben), Eingabe linear.
+/// Relative luminance (Rec. 709 / sRGB primaries), linear input.
 #[inline]
 pub fn luminance(c: [f32; 3]) -> f32 {
     0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]

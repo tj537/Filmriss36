@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::{CameraDescriptor, CameraId, Frame};
 
-/// Wird nach jedem neuen Bild aufgerufen (z. B. `egui::Context::request_repaint`).
+/// Called after every new frame (e.g. `egui::Context::request_repaint`).
 pub type Notify = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -33,13 +33,13 @@ impl Shared {
 
     pub(crate) fn set_state(&self, state: StreamState) {
         if let StreamState::Failed(msg) = &state {
-            log::error!("Kamera: {msg}");
+            log::error!("camera: {msg}");
         }
         *self.state.lock().unwrap() = state;
         (self.notify)();
     }
 
-    /// Holt einen (recycelten) Puffer mit genau `len` Bytes.
+    /// Gets a (recycled) buffer of exactly `len` bytes.
     pub(crate) fn buffer(&self, len: usize) -> Vec<u8> {
         let mut buf = self.pool.lock().unwrap().pop().unwrap_or_default();
         buf.resize(len, 0);
@@ -70,7 +70,7 @@ impl Shared {
     }
 }
 
-/// Ein laufender Kamerastream. Beim Drop wird der Capture-Thread beendet.
+/// A running camera stream. Dropping it stops the capture thread.
 pub struct CameraStream {
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
@@ -78,7 +78,7 @@ pub struct CameraStream {
 }
 
 impl CameraStream {
-    /// Startet den Stream im Hintergrund – blockiert nicht. Fehler landen in [`Self::state`].
+    /// Starts the stream in the background – does not block. Errors end up in [`Self::state`].
     pub fn open(descriptor: CameraDescriptor, notify: Notify) -> Self {
         let shared = Arc::new(Shared {
             latest: Mutex::new(None),
@@ -97,11 +97,11 @@ impl CameraStream {
                 #[cfg(feature = "native")]
                 CameraId::Native(index) => crate::native::run(&index, &thread_shared),
                 #[cfg(not(feature = "native"))]
-                CameraId::Native(_) => thread_shared.set_state(StreamState::Failed(
-                    "Native Kameras sind in diesem Build deaktiviert".into(),
-                )),
+                CameraId::Native(_) => {
+                    thread_shared.set_state(StreamState::Failed("native cameras are disabled in this build".into()))
+                }
             })
-            .expect("Kamera-Thread konnte nicht gestartet werden");
+            .expect("failed to spawn camera thread");
 
         Self {
             shared,
@@ -114,12 +114,12 @@ impl CameraStream {
         &self.descriptor
     }
 
-    /// Nimmt das neueste Bild (falls seit dem letzten Aufruf eines kam).
+    /// Takes the newest frame (if one arrived since the last call).
     pub fn take_frame(&self) -> Option<Frame> {
         self.shared.latest.lock().unwrap().take()
     }
 
-    /// Gibt einen nicht mehr benötigten Bildpuffer zur Wiederverwendung zurück.
+    /// Returns a no-longer-needed frame buffer for reuse.
     pub fn recycle(&self, data: Vec<u8>) {
         self.shared.recycle(data);
     }

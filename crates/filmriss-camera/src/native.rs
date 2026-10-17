@@ -1,4 +1,4 @@
-//! Native Kameras über nokhwa (AVFoundation / V4L2 / Media Foundation).
+//! Native cameras via nokhwa (AVFoundation / V4L2 / Media Foundation).
 
 use nokhwa::pixel_format::RgbAFormat;
 use nokhwa::utils::{ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType};
@@ -7,7 +7,7 @@ use nokhwa::{Camera, FormatDecoder as _};
 use crate::stream::{Shared, StreamState};
 use crate::{CameraDescriptor, CameraId, NativeIndex};
 
-/// Nach so vielen Fehlern in Folge gilt der Stream als tot.
+/// After this many consecutive errors the stream is considered dead.
 const MAX_CONSECUTIVE_ERRORS: u32 = 60;
 
 pub(crate) fn list() -> Vec<CameraDescriptor> {
@@ -23,7 +23,7 @@ pub(crate) fn list() -> Vec<CameraDescriptor> {
             })
             .collect(),
         Err(e) => {
-            log::warn!("Kameras konnten nicht abgefragt werden: {e}");
+            log::warn!("could not query cameras: {e}");
             Vec::new()
         }
     }
@@ -33,12 +33,12 @@ pub(crate) fn run(index: &NativeIndex, shared: &Shared) {
     let mut cam = match open(index) {
         Ok(cam) => cam,
         Err(e) => {
-            shared.set_state(StreamState::Failed(format!("Kamera konnte nicht geöffnet werden: {e}")));
+            shared.set_state(StreamState::Failed(format!("could not open camera: {e}")));
             return;
         }
     };
     let fmt = cam.camera_format();
-    log::info!("Kamera läuft: {fmt}");
+    log::info!("camera running: {fmt}");
     shared.set_state(StreamState::Running {
         width: fmt.width(),
         height: fmt.height(),
@@ -66,9 +66,9 @@ pub(crate) fn run(index: &NativeIndex, shared: &Shared) {
             }
             Err(e) => {
                 errors += 1;
-                log::warn!("Kamerabild verworfen: {e}");
+                log::warn!("dropped camera frame: {e}");
                 if errors >= MAX_CONSECUTIVE_ERRORS {
-                    shared.set_state(StreamState::Failed(format!("Kamera liefert keine Bilder: {e}")));
+                    shared.set_state(StreamState::Failed(format!("camera delivers no frames: {e}")));
                     break;
                 }
             }
@@ -84,17 +84,17 @@ fn open(index: &NativeIndex) -> Result<Camera, nokhwa::NokhwaError> {
     };
     let mut cam = Camera::new(index, RequestedFormat::new::<RgbAFormat>(RequestedFormatType::None))?;
 
-    // Eigene Formatwahl: flüssig (≥ 24 fps) schlägt Auflösung, Ziel ist ~1080p.
+    // Own format choice: smooth (≥ 24 fps) beats resolution, target is ~1080p.
     match cam.compatible_camera_formats() {
         Ok(formats) => {
             if let Some(best) = pick_format(&formats) {
                 let request = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::Exact(best));
                 if let Err(e) = cam.set_camera_requset(request) {
-                    log::warn!("Format {best} nicht setzbar, nutze Standard: {e}");
+                    log::warn!("cannot set format {best}, using default: {e}");
                 }
             }
         }
-        Err(e) => log::warn!("Kameraformate nicht abfragbar: {e}"),
+        Err(e) => log::warn!("cannot query camera formats: {e}"),
     }
     cam.open_stream()?;
     Ok(cam)
@@ -108,7 +108,7 @@ fn pick_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
         .max_by_key(|f| {
             let pixels = f.width() as i64 * f.height() as i64;
             let smooth = f.frame_rate() >= 24;
-            // Unkomprimierte Formate sind billiger zu dekodieren als MJPEG.
+            // Uncompressed formats are cheaper to decode than MJPEG.
             let cheap = matches!(f.format(), FrameFormat::NV12 | FrameFormat::YUYV);
             (smooth, -(pixels - TARGET).abs(), f.frame_rate(), cheap)
         })

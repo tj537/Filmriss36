@@ -1,123 +1,123 @@
-# Filmriss – Architektur
+# Filmriss – Architecture
 
-## Warum Rust + wgpu + 3D-LUTs?
+## Why Rust + wgpu + 3D LUTs?
 
-| Anforderung | Lösung |
+| Requirement | Solution |
 |---|---|
-| Läuft auf macOS, Linux/Raspberry Pi, Windows, später Android | **Rust** kompiliert nativ für alle Ziele, ohne Runtime/GC |
-| Flüssige Live-Preview, auch auf schwacher Hardware | **wgpu** (Metal / Vulkan / DX12 / OpenGL ES): die Bildbearbeitung läuft komplett im Fragment-Shader |
-| Beliebig komplexe Filmlooks ohne Performance-Einbruch | **3D-LUT als 3D-Textur**: Die Textur-Hardware interpoliert trilinear; ein Look kostet pro Pixel genau *einen* Texturzugriff, egal wie aufwendig er berechnet wurde |
-| Eigene Simulationen erstellen | **Rezepte** (TOML) mit verständlichen Reglern, die in eine LUT „gebacken“ werden |
-| Fremde Looks nutzen | **`.cube`-Import** (Adobe/Resolve-Standard); Rezepte können auf einer `.cube` aufsetzen |
-| Eine UI für Maus und Touch | **egui**: Immediate-Mode-UI, Touch-Events werden wie Pointer behandelt; läuft auf Desktop und Android |
+| Runs on macOS, Linux/Raspberry Pi, Windows, later Android | **Rust** compiles natively for all targets, no runtime/GC |
+| Smooth live preview, even on weak hardware | **wgpu** (Metal / Vulkan / DX12 / OpenGL ES): all image processing happens in the fragment shader |
+| Arbitrarily complex film looks without a performance hit | **3D LUT as a 3D texture**: the texture hardware interpolates trilinearly; a look costs exactly *one* texture fetch per pixel, no matter how elaborate its computation was |
+| Create your own simulations | **Recipes** (TOML) with understandable sliders that get "baked" into a LUT |
+| Use third-party looks | **`.cube` import** (Adobe/Resolve standard); recipes can build on top of a `.cube` |
+| One UI for mouse and touch | **egui**: immediate-mode UI, touch events are handled like pointer events; runs on desktop and Android |
 
-Die Kombination „Rezept → LUT backen → GPU“ ist dieselbe Idee, die Kameras intern nutzen:
-die teure Farbmathematik passiert **einmal** (≈1 ms für 33³ Stützstellen), nicht 30× pro Sekunde
-für jeden der 2 Mio. Pixel.
+The "recipe → bake LUT → GPU" combination is the same idea cameras use internally: the
+expensive color math happens **once** (≈1 ms for 33³ grid points), not 30 times per second
+for each of 2 million pixels.
 
-## Datenfluss
+## Data flow
 
 ```
- Kamera-Thread                         UI-Thread (egui)                    GPU
-┌──────────────┐  neuestes Bild   ┌───────────────────────┐  write_texture ┌──────────────────────┐
-│ nokhwa /     │ ───────────────▶ │ take_frame()          │ ─────────────▶ │ Kamera-Textur RGBA8  │
-│ Testbild     │   (Slot, alte    │ Arc<Frame> + ID       │                │                      │
-│ YUV→RGBA     │    werden        │                       │  bei Wechsel   │ LUT-Textur 33³ RGBA16F│
-└──────────────┘    verworfen)    │ Simulation wählen ────┼──────────────▶ │                      │
-        ▲                         │                       │                │ Fragment-Shader:     │
-        └── Puffer-Recycling ◀────│ alter Frame frei?     │                │  LUT → Intensität →  │
-                                  └───────────────────────┘                │  Vignette → Korn     │
-                                             │ Auslöser                    └──────────────────────┘
+ Camera thread                         UI thread (egui)                    GPU
+┌──────────────┐  newest frame    ┌───────────────────────┐  write_texture ┌──────────────────────┐
+│ nokhwa /     │ ───────────────▶ │ take_frame()          │ ─────────────▶ │ camera texture RGBA8 │
+│ test pattern │   (slot, old     │ Arc<Frame> + ID       │                │                      │
+│ YUV→RGBA     │    frames are    │                       │  on change     │ LUT texture 33³ RGBA16F│
+└──────────────┘    dropped)      │ select simulation ────┼──────────────▶ │                      │
+        ▲                         │                       │                │ fragment shader:     │
+        └── buffer recycling ◀────│ old frame unused?     │                │  LUT → intensity →   │
+                                  └───────────────────────┘                │  vignette → grain    │
+                                             │ shutter                     └──────────────────────┘
                                              ▼
-                                  Capture-Thread: dieselbe Pipeline auf der CPU (rayon) → JPEG
+                                  capture thread: same pipeline on the CPU (rayon) → JPEG
 ```
 
-- **Latenz**: Der Kamera-Thread überschreibt einen Ein-Bild-Slot. Kommt die UI nicht hinterher,
-  wird nie ein Rückstau aufgebaut.
-- **Speicher**: Bildpuffer werden recycelt (Pool), keine 8-MB-Allokation pro Frame.
-- **Repaint nur bei Bedarf**: Der Kamera-Thread weckt egui per `request_repaint()`; ohne neue
-  Bilder schläft die App.
-- **Preview = Foto**: `filmriss_core::process::shade` und `preview.wgsl` implementieren dieselben
-  Formeln (inkl. identischem Integer-Hash fürs Korn). Das gespeicherte Foto sieht aus wie die Preview.
+- **Latency**: the camera thread overwrites a single-frame slot. If the UI can't keep up,
+  no backlog ever builds up.
+- **Memory**: frame buffers are recycled (pool), no 8 MB allocation per frame.
+- **Repaint only when needed**: the camera thread wakes egui via `request_repaint()`; without
+  new frames the app sleeps.
+- **Preview = photo**: `filmriss_core::process::shade` and `preview.wgsl` implement the same
+  formulas (including an identical integer hash for the grain). The saved photo looks like the preview.
 
 ## Crates
 
 ```
 crates/
-├── filmriss-core     Plattformunabhängig, ohne GPU/Kamera – voll testbar
-│   ├── color.rs      sRGB-Transferkurven, Oklab
-│   ├── lut.rs        Lut3D: .cube lesen/schreiben, trilineares Sampling
-│   ├── recipe.rs     FilmRecipe: Parameter → bake() → Lut3D
-│   ├── presets.rs    eingebaute Rezepte (presets/*.toml, zur Compile-Zeit eingebettet)
-│   ├── library.rs    eingebaut + eigene Rezepte + .cube-Dateien, Ordnerverwaltung
-│   └── process.rs    CPU-Referenzpipeline (Foto, Thumbnails)
-├── filmriss-camera   Capture-Threads, Frame-Slot, Puffer-Pool
-│   ├── test_pattern  animiertes Testbild (ColorChecker, Farbrad, Verläufe)
+├── filmriss-core     platform-independent, no GPU/camera – fully testable
+│   ├── color.rs      sRGB transfer curves, Oklab
+│   ├── lut.rs        Lut3D: read/write .cube, trilinear sampling
+│   ├── recipe.rs     FilmRecipe: parameters → bake() → Lut3D
+│   ├── presets.rs    built-in recipes (presets/*.toml, embedded at compile time)
+│   ├── library.rs    built-in + custom recipes + .cube files, folder management
+│   └── process.rs    CPU reference pipeline (photos, thumbnails)
+├── filmriss-camera   capture threads, frame slot, buffer pool
+│   ├── test_pattern  animated test pattern (ColorChecker, color wheel, ramps)
 │   └── native        nokhwa: AVFoundation (macOS), V4L2 (Linux/Pi), MSMF (Windows)
-└── filmriss-app      egui/eframe-App
-    ├── preview.rs    wgpu-Pipeline als egui-Paint-Callback
-    ├── preview.wgsl  der Shader
-    ├── app.rs        Zustand, Gesten, Layout
-    ├── editor.rs     Rezept-Editor
-    ├── thumbnails.rs Filmstreifen-Vorschauen
-    └── capture.rs    Fotoaufnahme
+└── filmriss-app      egui/eframe app
+    ├── preview.rs    wgpu pipeline as an egui paint callback
+    ├── preview.wgsl  the shader
+    ├── app.rs        state, gestures, layout
+    ├── editor.rs     recipe editor
+    ├── thumbnails.rs film strip previews
+    └── capture.rs    photo capture
 ```
 
-## Das Farbmodell der Rezepte
+## The recipe color model
 
-Reihenfolge in `FilmRecipe::apply` (Eingabe/Ausgabe: sRGB-kodiert, wie Kamerabilder):
+Order in `FilmRecipe::apply` (input/output: sRGB-encoded, like camera frames):
 
-1. sRGB → linear; **Belichtung** und **Weißabgleich** (Kanalverstärkung, helligkeitsneutral)
-2. **Schwarzweiß** über Kanalmischer (Farbfilter-Simulation: Rot-, Gelb-, Grünfilter …)
-3. linear → **Oklab/Oklch** (wahrnehmungsgleichmäßig)
-4. **Farbbereiche**: 7 Bänder (Rot, Orange, Gelb, Grün, Cyan, Blau, Magenta) mit weichen
-   Übergängen – Farbton, Sättigung, Helligkeit; nahezu neutrale Farben bleiben unberührt
-5. globale **Sättigung**
-6. **Tonkurve** auf L: Kontrast (Potenz-S-Kurve um Mittelgrau), Lichter, Schatten, Fade;
-   die Chroma folgt der Helligkeitsänderung teilweise (wie bei echtem Film)
-7. **Split-Toning** für Schatten/Lichter
-8. zurück nach sRGB mit **Gamut-Mapping** (Chroma reduzieren statt hart clippen)
+1. sRGB → linear; **exposure** and **white balance** (channel gains, luminance-neutral)
+2. **Black & white** via a channel mixer (simulates red, yellow, green … filters)
+3. linear → **Oklab/Oklch** (perceptually uniform)
+4. **Color ranges**: 7 bands (red, orange, yellow, green, cyan, blue, magenta) with smooth
+   transitions – hue, saturation, lightness; near-neutral colors stay untouched
+5. global **saturation**
+6. **Tone curve** on L: contrast (power S-curve around mid gray), highlights, shadows, fade;
+   chroma partly follows the lightness change (as with real film)
+7. **Split toning** for shadows/highlights
+8. back to sRGB with **gamut mapping** (reduce chroma instead of hard clipping)
 
-Korn und Vignette sind Teil des Rezepts, werden aber *nicht* in die LUT gebacken (sie hängen von
-der Pixelposition ab), sondern im Shader berechnet.
+Grain and vignette are part of the recipe but are *not* baked into the LUT (they depend on the
+pixel position); they are computed in the shader.
 
-Die eingebauten Looks sind eigene Interpretationen. Fujifilms Simulationsnamen sind Marken, die
-Original-LUTs nicht öffentlich – deshalb eigene Namen mit „vgl. …“ in der Beschreibung.
+The built-in looks are our own interpretations. Fujifilm's simulation names are trademarks and
+the original LUTs are not public – hence our own names with "cf. …" in the description.
 
-## Plattform-Fahrplan
+## Platform roadmap
 
-### macOS (jetzt)
-- Rendering über Metal, Kamera über AVFoundation (nokhwa).
-- Beim ersten Start fragt macOS nach der Kamera-Berechtigung. Aus dem Terminal gestartet, gilt
-  die Freigabe für die Terminal-App (bzw. VS Code/iTerm).
-- Für ein echtes `.app`-Bundle (später): `cargo bundle` o. Ä. mit `NSCameraUsageDescription`
-  in der `Info.plist`.
+### macOS (now)
+- Rendering via Metal, camera via AVFoundation (nokhwa).
+- On first launch macOS asks for camera permission. When started from a terminal, the
+  permission applies to the terminal app (or VS Code/iTerm).
+- For a real `.app` bundle (later): `cargo bundle` or similar with `NSCameraUsageDescription`
+  in the `Info.plist`.
 
 ### Linux / Raspberry Pi
-- USB-Kameras funktionieren direkt über V4L2.
-- Pi-Kameramodule (CSI) laufen über **libcamera**. Kurzfristig: `libcamerify filmriss`
-  (V4L2-Kompatibilitätsschicht). Langfristig: eigenes Backend mit dem `libcamera`-Crate,
-  das NV12/YUV420 direkt liefert.
-- GPU: Pi 4/5 haben Vulkan (v3dv), ältere Modelle OpenGL ES – wgpu fällt automatisch zurück.
-- Benötigte Pakete zum Bauen: `libclang-dev libv4l-dev libxkbcommon-dev libwayland-dev`.
+- USB cameras work directly via V4L2.
+- Pi camera modules (CSI) run through **libcamera**. Short term: `libcamerify filmriss`
+  (V4L2 compatibility layer). Long term: a dedicated backend using the `libcamera` crate that
+  delivers NV12/YUV420 directly.
+- GPU: Pi 4/5 have Vulkan (v3dv), older models OpenGL ES – wgpu falls back automatically.
+- Packages needed to build: `libclang-dev libv4l-dev libxkbcommon-dev libwayland-dev`.
 
-### Android (nächster großer Schritt)
-Die Codebasis ist bereits darauf vorbereitet (`cargo check -p filmriss-app --target aarch64-linux-android` läuft durch):
-- `filmriss-app` ist eine Bibliothek mit `android_main` (hinter `cfg(target_os = "android")`).
-- `nokhwa` wird auf Android nicht gelinkt (target-spezifische Abhängigkeit).
+### Android (next big step)
+The codebase is already prepared (`cargo check -p filmriss-app --target aarch64-linux-android` passes):
+- `filmriss-app` is a library with `android_main` (behind `cfg(target_os = "android")`).
+- `nokhwa` is not linked on Android (target-specific dependency).
 
-Noch zu tun:
-1. `crate-type = ["cdylib", "lib"]` in `filmriss-app` und Build mit `cargo-apk` oder `xbuild`
+Still to do:
+1. `crate-type = ["cdylib", "lib"]` in `filmriss-app` and build with `cargo-apk` or `xbuild`
    (`AndroidManifest`: `android.permission.CAMERA`, `android.hardware.camera`).
-2. **Kamera-Backend `android`** in `filmriss-camera` über die Camera2-NDK-API (`ndk`-Crate /
-   `ndk-sys` mit `ACameraManager`, `AImageReader` im Format `YUV_420_888`).
-3. **YUV direkt auf die GPU**: Y- und UV-Ebene als zwei Texturen hochladen und im Shader nach
-   RGB wandeln – spart die CPU-Konvertierung (wichtig auf dem Handy; lohnt sich auch auf dem Pi).
-4. Laufzeit-Berechtigung (JNI → `ActivityCompat.requestPermissions`) und Speicherort über
-   `MediaStore` bzw. `Paths::from_root(app.internal_data_path())`.
+2. **`android` camera backend** in `filmriss-camera` using the Camera2 NDK API (`ndk` crate /
+   `ndk-sys` with `ACameraManager`, `AImageReader` in `YUV_420_888` format).
+3. **YUV straight to the GPU**: upload the Y and UV planes as two textures and convert to RGB
+   in the shader – saves the CPU conversion (important on phones; worth it on the Pi too).
+4. Runtime permission (JNI → `ActivityCompat.requestPermissions`) and storage via
+   `MediaStore` or `Paths::from_root(app.internal_data_path())`.
 
-### Spätere Optimierungen
-- Separater Foto-Stream in voller Sensorauflösung (Preview bleibt bei ~1080p).
-- Aufnahme auf der GPU rendern (Readback) statt CPU – schneller bei hohen Auflösungen.
-- Mipmaps/Downsampling für sehr hochauflösende Kameras in kleinen Fenstern.
-- RAW (DNG) + Rezept als Metadaten → nicht-destruktives Entwickeln.
+### Later optimizations
+- Separate photo stream at full sensor resolution (the preview stays at ~1080p).
+- Render captures on the GPU (readback) instead of the CPU – faster at high resolutions.
+- Mipmaps/downsampling for very high-resolution cameras in small windows.
+- RAW (DNG) + recipe as metadata → non-destructive development.

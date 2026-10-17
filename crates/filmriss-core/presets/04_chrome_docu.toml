@@ -1,5 +1,5 @@
-name = "Chrome Doku"
-description = "Gedämpfte Farben, harte Schatten, cyanstichiges Blau – Reportage-Look (vgl. Classic Chrome)."
+name = "Chrome Docu"
+description = "Muted colors, hard shadows, cyan-leaning blues – reportage look (cf. Classic Chrome)."
 contrast = 0.15
 highlights = -0.15
 shadows = -0.3

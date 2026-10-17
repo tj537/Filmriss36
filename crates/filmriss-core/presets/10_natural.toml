@@ -1,5 +1,5 @@
-name = "Natur"
-description = "Natürliche, farbtreue Wiedergabe mit etwas mehr Biss (vgl. Reala Ace)."
+name = "Natural"
+description = "Natural, faithful colors with a bit more bite (cf. Reala Ace)."
 contrast = 0.2
 highlights = -0.05
 saturation = 0.08

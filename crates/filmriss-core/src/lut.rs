@@ -1,26 +1,26 @@
-//! 3D-LUT (Lookup Table) – das Herzstück jeder Filmsimulation.
+//! 3D LUT (lookup table) – the heart of every film simulation.
 //!
-//! Eine 3D-LUT bildet jede Eingangsfarbe (R,G,B) auf eine Ausgangsfarbe ab. Gespeichert
-//! wird ein Gitter aus `size³` Stützstellen; dazwischen wird trilinear interpoliert.
-//! Auf der GPU übernimmt das die Textur-Hardware (3D-Textur + linearer Filter) – damit
-//! kostet ein beliebig komplexer Look pro Pixel genau einen Texturzugriff.
+//! A 3D LUT maps every input color (R,G,B) to an output color. It stores a grid of
+//! `size³` sample points and interpolates trilinearly in between. On the GPU the
+//! texture hardware does this (3D texture + linear filter) – so an arbitrarily complex
+//! look costs exactly one texture fetch per pixel.
 //!
-//! Datenlayout entspricht dem `.cube`-Format: R läuft am schnellsten, dann G, dann B.
+//! The data layout matches the `.cube` format: R varies fastest, then G, then B.
 
 use rayon::prelude::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum LutError {
-    #[error("Zeile {line}: {msg}")]
+    #[error("line {line}: {msg}")]
     Parse { line: usize, msg: String },
-    #[error("LUT_3D_SIZE fehlt")]
+    #[error("LUT_3D_SIZE is missing")]
     MissingSize,
-    #[error("1D-LUTs werden (noch) nicht unterstützt")]
+    #[error("1D LUTs are not supported (yet)")]
     Unsupported1D,
-    #[error("LUT-Größe {0} ist ungültig (erlaubt: 2..=128)")]
+    #[error("LUT size {0} is invalid (allowed: 2..=128)")]
     InvalidSize(usize),
-    #[error("erwartet {expected} Einträge, gefunden {found}")]
+    #[error("expected {expected} entries, found {found}")]
     WrongEntryCount { expected: usize, found: usize },
 }
 
@@ -31,10 +31,10 @@ pub struct Lut3D {
 }
 
 impl Lut3D {
-    /// Erzeugt eine LUT, indem `f` für jede Gitterposition ausgewertet wird (parallel).
-    /// Ein- und Ausgabe sind sRGB-kodierte Werte im Bereich 0..1.
+    /// Builds a LUT by evaluating `f` at every grid position (in parallel).
+    /// Input and output are sRGB-encoded values in the range 0..1.
     pub fn from_fn(size: usize, f: impl Fn([f32; 3]) -> [f32; 3] + Sync) -> Self {
-        assert!((2..=128).contains(&size), "ungültige LUT-Größe {size}");
+        assert!((2..=128).contains(&size), "invalid LUT size {size}");
         let scale = 1.0 / (size - 1) as f32;
         let data = (0..size * size * size)
             .into_par_iter()
@@ -56,8 +56,8 @@ impl Lut3D {
         self.size
     }
 
-    /// Rohdaten im `.cube`-Layout (R am schnellsten). Passt direkt in eine 3D-Textur
-    /// mit x = R, y = G, z = B.
+    /// Raw data in `.cube` layout (R fastest). Fits directly into a 3D texture
+    /// with x = R, y = G, z = B.
     pub fn data(&self) -> &[[f32; 3]] {
         &self.data
     }
@@ -67,7 +67,7 @@ impl Lut3D {
         self.data[r + self.size * (g + self.size * b)]
     }
 
-    /// Trilineare Interpolation – identisch zu dem, was die GPU-Textureinheit macht.
+    /// Trilinear interpolation – identical to what the GPU texture unit does.
     #[inline]
     pub fn sample(&self, rgb: [f32; 3]) -> [f32; 3] {
         let max = (self.size - 1) as f32;
@@ -98,8 +98,8 @@ impl Lut3D {
         lerp3(c0, c1, fb)
     }
 
-    /// Parst eine Adobe/Resolve `.cube`-Datei (3D). `DOMAIN_MIN/MAX` und
-    /// `LUT_3D_INPUT_RANGE` werden unterstützt und auf 0..1 normalisiert.
+    /// Parses an Adobe/Resolve `.cube` file (3D). `DOMAIN_MIN/MAX` and
+    /// `LUT_3D_INPUT_RANGE` are supported and normalized to 0..1.
     pub fn parse_cube(text: &str) -> Result<Self, LutError> {
         let mut size = None;
         let mut domain_min = [0.0f32; 3];
@@ -120,7 +120,7 @@ impl Lut3D {
 
             let floats = |parts: std::str::SplitWhitespace<'_>| -> Result<Vec<f32>, LutError> {
                 parts
-                    .map(|p| p.parse::<f32>().map_err(|_| err("Zahl erwartet")))
+                    .map(|p| p.parse::<f32>().map_err(|_| err("number expected")))
                     .collect()
             };
 
@@ -131,7 +131,7 @@ impl Lut3D {
                     let n: usize = parts
                         .next()
                         .and_then(|s| s.parse().ok())
-                        .ok_or_else(|| err("Größe erwartet"))?;
+                        .ok_or_else(|| err("size expected"))?;
                     if !(2..=128).contains(&n) {
                         return Err(LutError::InvalidSize(n));
                     }
@@ -140,7 +140,7 @@ impl Lut3D {
                 }
                 "DOMAIN_MIN" | "DOMAIN_MAX" => {
                     let v = floats(parts)?;
-                    let v: [f32; 3] = v.try_into().map_err(|_| err("3 Werte erwartet"))?;
+                    let v: [f32; 3] = v.try_into().map_err(|_| err("3 values expected"))?;
                     if first == "DOMAIN_MIN" {
                         domain_min = v
                     } else {
@@ -149,16 +149,16 @@ impl Lut3D {
                 }
                 "LUT_3D_INPUT_RANGE" => {
                     let v = floats(parts)?;
-                    let [lo, hi]: [f32; 2] = v.try_into().map_err(|_| err("2 Werte erwartet"))?;
+                    let [lo, hi]: [f32; 2] = v.try_into().map_err(|_| err("2 values expected"))?;
                     domain_min = [lo; 3];
                     domain_max = [hi; 3];
                 }
                 kw if kw.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) => {
-                    log::debug!("unbekanntes .cube-Schlüsselwort ignoriert: {kw}");
+                    log::debug!("ignoring unknown .cube keyword: {kw}");
                 }
                 _ => {
                     let v = floats(line.split_whitespace())?;
-                    let v: [f32; 3] = v.try_into().map_err(|_| err("3 Werte erwartet"))?;
+                    let v: [f32; 3] = v.try_into().map_err(|_| err("3 values expected"))?;
                     data.push(v);
                 }
             }
@@ -177,7 +177,7 @@ impl Lut3D {
         if domain_min == [0.0; 3] && domain_max == [1.0; 3] {
             return Ok(lut);
         }
-        // Nicht-standard Domain: auf 0..1 umrechnen, damit GPU und CPU nur einen Fall kennen.
+        // Non-standard domain: remap to 0..1 so GPU and CPU only have to handle one case.
         Ok(Self::from_fn(size, |c| {
             let mut x = [0.0; 3];
             for i in 0..3 {
@@ -187,12 +187,12 @@ impl Lut3D {
         }))
     }
 
-    /// Exportiert als `.cube` – damit lassen sich eigene Rezepte auch in
-    /// Lightroom, Photoshop, Resolve, Final Cut usw. verwenden.
+    /// Exports as `.cube` – so custom recipes can also be used in
+    /// Lightroom, Photoshop, Resolve, Final Cut etc.
     pub fn to_cube_string(&self, title: &str) -> String {
         use std::fmt::Write as _;
         let mut out = String::with_capacity(self.data.len() * 28 + 128);
-        let _ = writeln!(out, "# Erstellt mit Filmriss");
+        let _ = writeln!(out, "# Created with Filmriss");
         let _ = writeln!(out, "TITLE \"{}\"", title.replace('"', "'"));
         let _ = writeln!(out, "LUT_3D_SIZE {}", self.size);
         let _ = writeln!(out, "DOMAIN_MIN 0.0 0.0 0.0");
@@ -240,8 +240,8 @@ mod tests {
 
     #[test]
     fn cube_handles_comments_and_domain() {
-        let mut text = String::from("# Kommentar\nTITLE \"x\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 2 2 2\n");
-        // Identität über Domain 0..2: Eingabe 0..1 landet in der unteren Gitterhälfte.
+        let mut text = String::from("# comment\nTITLE \"x\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 2 2 2\n");
+        // Identity over domain 0..2: input 0..1 lands in the lower half of the grid.
         for b in 0..2 {
             for g in 0..2 {
                 for r in 0..2 {

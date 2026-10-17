@@ -1,5 +1,5 @@
 name = "Sepia"
-description = "Getöntes Schwarzweiß wie ein alter Abzug."
+description = "Toned black & white like an old print."
 monochrome = true
 contrast = 0.1
 highlights = -0.1

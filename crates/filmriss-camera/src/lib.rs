@@ -1,14 +1,14 @@
-//! Kamera-Abstraktion für Filmriss.
+//! Camera abstraction for Filmriss.
 //!
-//! Jede Quelle läuft in einem eigenen Capture-Thread und legt immer nur das
-//! *neueste* Bild in einen Slot ([`CameraStream::take_frame`]). Kommt die UI nicht
-//! hinterher, werden alte Bilder verworfen statt aufgestaut – so bleibt die Latenz
-//! der Live-Preview minimal. Bildpuffer werden recycelt (keine 8-MB-Allokation pro Frame).
+//! Every source runs on its own capture thread and only ever puts the *newest*
+//! frame into a slot ([`CameraStream::take_frame`]). If the UI can't keep up, old
+//! frames are dropped instead of queued – keeping live-preview latency minimal.
+//! Frame buffers are recycled (no 8 MB allocation per frame).
 //!
 //! Backends:
-//! - [`CameraId::TestPattern`]: animiertes Testbild (überall verfügbar, ideal zum Entwickeln von Looks)
-//! - [`CameraId::Native`] (Feature `native`): nokhwa → AVFoundation / V4L2 / MSMF
-//! - geplant: Android (Camera2 NDK), Raspberry Pi (libcamera) – siehe `docs/ARCHITECTURE.md`
+//! - [`CameraId::TestPattern`]: animated test pattern (available everywhere, ideal for developing looks)
+//! - [`CameraId::Native`] (feature `native`): nokhwa → AVFoundation / V4L2 / MSMF
+//! - planned: Android (Camera2 NDK), Raspberry Pi (libcamera) – see `docs/ARCHITECTURE.md`
 
 mod frame;
 #[cfg(feature = "native")]
@@ -32,7 +32,7 @@ pub enum NativeIndex {
 }
 
 impl CameraId {
-    /// Stabiler Schlüssel, um die zuletzt genutzte Kamera zu speichern.
+    /// Stable key used to remember the last used camera.
     pub fn key(&self) -> String {
         match self {
             CameraId::TestPattern => "test".into(),
@@ -52,13 +52,13 @@ impl CameraDescriptor {
     pub fn test_pattern() -> Self {
         Self {
             id: CameraId::TestPattern,
-            name: "Testbild".into(),
+            name: "Test pattern".into(),
         }
     }
 }
 
-/// Fragt (auf macOS) die Kamera-Berechtigung an. Der Callback kommt asynchron,
-/// auf anderen Plattformen sofort mit `true`.
+/// Requests camera permission (on macOS). The callback arrives asynchronously;
+/// on other platforms it is called immediately with `true`.
 pub fn request_permission(on_done: impl Fn(bool) + Send + Sync + 'static) {
     #[cfg(feature = "native")]
     nokhwa::nokhwa_initialize(on_done);
@@ -66,7 +66,7 @@ pub fn request_permission(on_done: impl Fn(bool) + Send + Sync + 'static) {
     on_done(true);
 }
 
-/// Alle verfügbaren Kameras; das Testbild ist immer als letzter Eintrag dabei.
+/// All available cameras; the test pattern is always included as the last entry.
 pub fn list_cameras() -> Vec<CameraDescriptor> {
     #[allow(unused_mut)]
     let mut list = Vec::new();

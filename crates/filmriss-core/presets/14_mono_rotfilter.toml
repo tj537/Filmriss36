@@ -1,8 +1,0 @@
-name = "Mono Rotfilter"
-description = "Schwarzweiß mit Rotfilter: dramatisch dunkler Himmel, helle Haut, harter Kontrast."
-monochrome = true
-mono_mix = [0.85, 0.25, -0.1]
-contrast = 0.45
-shadows = -0.2
-grain = 0.35
-vignette = 0.2

@@ -1,11 +1,11 @@
-//! Bibliothek aller Filmsimulationen: eingebaute + eigene Rezepte + `.cube`-Dateien.
+//! Library of all film simulations: built-in + custom recipes + `.cube` files.
 //!
-//! Ordnerstruktur (macOS: `~/Library/Application Support/de.Filmriss.Filmriss/`):
-//! - `recipes/*.toml` – eigene Rezepte (in der App erstellt oder von Hand geschrieben)
-//! - `luts/*.cube`    – fremde 3D-LUTs; jede erscheint automatisch als Simulation
-//! - `exports/*.cube` – aus Rezepten exportierte LUTs für Lightroom, Resolve & Co.
+//! Folder layout (macOS: `~/Library/Application Support/de.Filmriss.Filmriss/`):
+//! - `recipes/*.toml` – custom recipes (created in the app or written by hand)
+//! - `luts/*.cube`    – third-party 3D LUTs; each one shows up as a simulation automatically
+//! - `exports/*.cube` – LUTs exported from recipes for Lightroom, Resolve & co.
 //!
-//! Fotos landen in `~/Pictures/Filmriss/` (bzw. dem Bilder-Ordner des Systems).
+//! Photos go to `~/Pictures/Filmriss/` (or the system's pictures folder).
 
 use std::collections::HashMap;
 use std::fs;
@@ -27,8 +27,8 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// Plattformübliche Ordner. `None`, wenn das System keine liefert (z. B. Android –
-    /// dort kommt der Pfad später aus dem App-Kontext, siehe [`Paths::from_root`]).
+    /// Platform-standard folders. `None` if the system provides none (e.g. Android –
+    /// there the path will come from the app context, see [`Paths::from_root`]).
     pub fn discover() -> Option<Self> {
         let proj = directories::ProjectDirs::from("de", "Filmriss", "Filmriss")?;
         let data = proj.data_dir();
@@ -67,12 +67,12 @@ pub enum Origin {
     CubeFile(PathBuf),
 }
 
-/// Eine auswählbare Filmsimulation inkl. fertig gebackener LUT.
+/// A selectable film simulation including its baked LUT.
 #[derive(Clone, Debug)]
 pub struct Simulation {
     pub recipe: FilmRecipe,
     pub origin: Origin,
-    /// Optionale Basis-LUT (aus einer `.cube`-Datei), auf die das Rezept aufsetzt.
+    /// Optional base LUT (from a `.cube` file) the recipe builds on.
     pub base: Option<Arc<Lut3D>>,
     pub lut: Arc<Lut3D>,
 }
@@ -96,7 +96,7 @@ impl Simulation {
         self.origin == Origin::BuiltIn
     }
 
-    /// Nach Änderungen am Rezept neu backen (dauert bei 33³ ~1 ms).
+    /// Re-bake after recipe changes (~1 ms at 33³).
     pub fn rebake(&mut self) {
         self.lut = Arc::new(self.recipe.bake(DEFAULT_LUT_SIZE, self.base.as_deref()));
     }
@@ -114,7 +114,7 @@ impl Simulation {
 
 pub struct Library {
     pub simulations: Vec<Simulation>,
-    /// Nicht-fatale Probleme beim Laden (kaputte Datei o. Ä.) für die UI.
+    /// Non-fatal problems while loading (broken file etc.) for the UI.
     pub warnings: Vec<String>,
 }
 
@@ -136,7 +136,7 @@ impl Library {
                         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
                         let recipe = FilmRecipe {
                             name: stem.into_owned(),
-                            description: format!("3D-LUT aus {file_name}"),
+                            description: format!("3D LUT from {file_name}"),
                             base_lut: Some(file_name.clone()),
                             ..FilmRecipe::default()
                         };
@@ -164,7 +164,7 @@ impl Library {
                         Some(lut) => Some(lut.clone()),
                         None => {
                             warnings.push(format!(
-                                "{}: Basis-LUT '{name}' nicht im LUT-Ordner gefunden",
+                                "{}: base LUT '{name}' not found in the LUT folder",
                                 path.display()
                             ));
                             continue;
@@ -181,20 +181,20 @@ impl Library {
         Self { simulations, warnings }
     }
 
-    /// Speichert ein Rezept als TOML. Gehört `existing` bereits zu einem eigenen
-    /// Rezept, wird diese Datei überschrieben, sonst eine neue angelegt.
+    /// Saves a recipe as TOML. If `existing` already belongs to a custom recipe,
+    /// that file is overwritten, otherwise a new one is created.
     pub fn save_recipe(paths: &Paths, recipe: &FilmRecipe, existing: Option<&Path>) -> io::Result<PathBuf> {
         fs::create_dir_all(&paths.recipes)?;
         let path = match existing {
             Some(p) if p.starts_with(&paths.recipes) => p.to_path_buf(),
             _ => unique_path(&paths.recipes, &slug(&recipe.name), "toml"),
         };
-        let header = "# Filmriss-Rezept – alle Felder optional, siehe presets/ im Repository\n";
+        let header = "# Filmriss recipe – all fields optional, see presets/ in the repository\n";
         fs::write(&path, format!("{header}{}", recipe.to_toml()))?;
         Ok(path)
     }
 
-    /// Exportiert die gebackene LUT einer Simulation als `.cube`.
+    /// Exports a simulation's baked LUT as `.cube`.
     pub fn export_cube(paths: &Paths, sim: &Simulation) -> io::Result<PathBuf> {
         fs::create_dir_all(&paths.exports)?;
         let path = unique_path(&paths.exports, &slug(sim.name()), "cube");
@@ -234,7 +234,7 @@ fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     path
 }
 
-/// Dateisystemfreundlicher Name: "Mein Grün-Look!" → "mein-gruen-look".
+/// File-system friendly name: "My Grün-Look!" → "my-gruen-look" (German umlauts are transliterated).
 pub fn slug(name: &str) -> String {
     let mut out = String::new();
     for c in name.to_lowercase().chars() {
@@ -249,7 +249,7 @@ pub fn slug(name: &str) -> String {
         }
     }
     let out = out.trim_matches('-').to_owned();
-    if out.is_empty() { "rezept".into() } else { out }
+    if out.is_empty() { "recipe".into() } else { out }
 }
 
 #[cfg(test)]
@@ -258,8 +258,8 @@ mod tests {
 
     #[test]
     fn slug_handles_umlauts() {
-        assert_eq!(slug("Mein Grün-Look!"), "mein-gruen-look");
-        assert_eq!(slug("???"), "rezept");
+        assert_eq!(slug("My Grün-Look!"), "my-gruen-look");
+        assert_eq!(slug("???"), "recipe");
     }
 
     #[test]
@@ -273,19 +273,19 @@ mod tests {
         )
         .unwrap();
         let recipe = FilmRecipe {
-            name: "Mein Look".into(),
+            name: "My Look".into(),
             contrast: 0.2,
             base_lut: Some("warm.cube".into()),
             ..Default::default()
         };
         let saved = Library::save_recipe(&paths, &recipe, None).unwrap();
-        assert!(saved.ends_with("mein-look.toml"));
+        assert!(saved.ends_with("my-look.toml"));
 
         let lib = Library::load(Some(&paths));
         assert!(lib.warnings.is_empty(), "{:?}", lib.warnings);
         let builtin = presets::builtin().len();
         assert_eq!(lib.simulations.len(), builtin + 2);
-        let mine = lib.simulations.iter().find(|s| s.name() == "Mein Look").unwrap();
+        let mine = lib.simulations.iter().find(|s| s.name() == "My Look").unwrap();
         assert!(mine.base.is_some());
         fs::remove_dir_all(&root).unwrap();
     }

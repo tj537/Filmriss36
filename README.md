@@ -1,95 +1,95 @@
 # Filmriss 🎞️
 
-Eine schnelle, offene Kamera-App mit **Live-Filmsimulationen** – geschrieben in Rust.
-Läuft auf dem Mac, unter Linux (auch Raspberry Pi) und Windows; Android ist vorbereitet.
+A fast, open camera app with **live film simulations** – written in Rust.
+Runs on macOS, Linux (including Raspberry Pi) and Windows; Android is prepared.
 
-- **Live-Preview auf der GPU** (wgpu: Metal/Vulkan/DX12/GL) – Filmlooks als 3D-LUT, ein Texturzugriff pro Pixel
-- **15 eingebaute Simulationen**, inspiriert von klassischen Filmen (Dia, Negativ, Kino, Schwarzweiß …)
-- **Eigene Simulationen**: Rezept-Editor mit Live-Vorschau, gespeichert als lesbares TOML
-- **`.cube`-LUTs importieren** (einfach in den LUT-Ordner legen) und **exportieren** (für Lightroom, Resolve & Co.)
-- **Korn & Vignette** wie beim Film, identisch in Preview und Foto
-- **Touch und Maus**: Wischen zum Wechseln, Halten für Vorher/Nachher, große Bedienelemente
+- **GPU live preview** (wgpu: Metal/Vulkan/DX12/GL) – film looks as 3D LUTs, one texture fetch per pixel
+- **15 built-in simulations** inspired by classic film stocks (slide, negative, cinema, black & white …)
+- **Custom simulations**: recipe editor with live preview, saved as readable TOML
+- **Import `.cube` LUTs** (just drop them into the LUT folder) and **export** them (for Lightroom, Resolve & co.)
+- **Grain & vignette** like real film, identical in preview and photo
+- **Touch and mouse**: swipe to switch, hold for before/after, large controls
 
-> Status: frühe Entwicklungsversion. Getestet wird zunächst auf macOS.
+> Status: early development version. Primary test target is macOS.
 
-## Schnellstart (macOS)
+## Quick start (macOS)
 
 ```bash
-# 1. Rust installieren (falls noch nicht vorhanden)
+# 1. Install Rust (if you haven't already)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# 2. Starten
+# 2. Run
 git clone https://github.com/tj537/filmriss36.git
 cd filmriss36
-cargo run            # Debug-Build (Abhängigkeiten werden trotzdem optimiert → flüssig)
-cargo run --release  # maximale Performance
+cargo run            # debug build (dependencies are still optimized → smooth)
+cargo run --release  # maximum performance
 ```
 
-Beim ersten Start fragt macOS nach dem **Kamerazugriff** – die Freigabe gilt für die App, aus der du
-`cargo run` startest (Terminal, iTerm, VS Code …). Falls versehentlich abgelehnt:
-*Systemeinstellungen › Datenschutz & Sicherheit › Kamera*. Ohne Kamera läuft ein animiertes Testbild.
+On first launch macOS asks for **camera access** – the permission applies to the app you run
+`cargo run` from (Terminal, iTerm, VS Code …). If you denied it by accident:
+*System Settings › Privacy & Security › Camera*. Without a camera an animated test pattern is shown.
 
-## Bedienung
+## Controls
 
-| Aktion | Maus / Trackpad | Touch | Tastatur |
+| Action | Mouse / trackpad | Touch | Keyboard |
 |---|---|---|---|
-| Simulation wechseln | Filmstreifen klicken, ziehen, Zwei-Finger-Wisch | Wischen | ← / → |
-| Foto aufnehmen | Auslöser | Auslöser | Leertaste |
-| Original zeigen | „Vorher“ halten / Preview gedrückt halten | gedrückt halten | C halten |
-| Geteilte Ansicht | „◑ Vergleich“ | „◑ Vergleich“ | S |
-| UI ausblenden | Doppelklick | Doppeltippen | H |
-| Technische Infos (FPS, Format, GPU) | „ℹ Info“ | | I |
+| Switch simulation | click/drag the film strip, two-finger swipe | swipe | ← / → |
+| Take photo | shutter button | shutter button | Space |
+| Show original | hold "Before" / hold on the preview | press and hold | hold C |
+| Split view | "◑ Compare" | "◑ Compare" | S |
+| Hide UI | double-click | double-tap | H |
+| Technical info (FPS, format, GPU) | "ℹ Info" | | I |
 
-Fotos landen in `~/Pictures/Filmriss/` als JPEG (optional zusätzlich das Original).
+Photos are saved as JPEG to `~/Pictures/Filmriss/` (optionally together with the original).
 
-## Eigene Filmsimulationen
+## Custom film simulations
 
-**Im Editor:** Tab *Rezept* öffnen, Regler verschieben (wirkt sofort live), Namen eingeben,
-*„Als neue Simulation“* speichern. Doppelklick auf einen Regler setzt ihn zurück.
+**In the editor:** open the *Recipe* tab, move the sliders (applied live), enter a name and
+click *"Save as new simulation"*. Double-click a slider to reset it.
 
-**Als Datei:** Rezepte sind TOML-Dateien im Rezept-Ordner
-(`~/Library/Application Support/de.Filmriss.Filmriss/recipes/`). Alle Felder sind optional:
+**As a file:** recipes are TOML files in the recipe folder
+(`~/Library/Application Support/de.Filmriss.Filmriss/recipes/`). All fields are optional:
 
 ```toml
-name = "Mein Kodak-Abend"
-description = "Warm, weich, leicht verblasst"
+name = "My Kodak Evening"
+description = "Warm, soft, slightly faded"
 temperature = 0.12
 contrast = 0.1
 fade = 0.1
 saturation = 0.1
 grain = 0.25
 
-[hues.orange]          # Hauttöne
+[hues.orange]          # skin tones
 lightness = 0.1
 
-[highlight_tone]       # Split-Toning der Lichter
-hue = 70.0             # Oklch-Farbton in Grad (≈ 70 = Bernstein, 200 = Cyan)
+[highlight_tone]       # split toning of the highlights
+hue = 70.0             # Oklch hue in degrees (≈ 70 = amber, 200 = cyan)
 strength = 0.3
 ```
 
-Die eingebauten Rezepte unter [`crates/filmriss-core/presets/`](crates/filmriss-core/presets) sind gute Vorlagen.
+The built-in recipes in [`crates/filmriss-core/presets/`](crates/filmriss-core/presets) make good templates.
 
-**`.cube`-LUTs:** in den LUT-Ordner (`…/de.Filmriss.Filmriss/luts/`) kopieren und
-*„Bibliothek neu laden“* klicken. Jede LUT erscheint als eigene Simulation und lässt sich im
-Editor feintunen – das Ergebnis wird als Rezept mit Verweis auf die LUT gespeichert.
+**`.cube` LUTs:** copy them into the LUT folder (`…/de.Filmriss.Filmriss/luts/`) and click
+*"Reload library"*. Each LUT appears as its own simulation and can be fine-tuned in the
+editor – the result is saved as a recipe that references the LUT.
 
-## Technik
+## Technology
 
-Rust · egui/eframe · wgpu · nokhwa · Oklab-Farbraum · 3D-LUTs (33³, RGBA16F)
+Rust · egui/eframe · wgpu · nokhwa · Oklab color space · 3D LUTs (33³, RGBA16F)
 
-Details zu Pipeline, Farbmodell und dem Weg zu Android & Raspberry Pi: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+Details on the pipeline, the color model and the road to Android & Raspberry Pi: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ```
-crates/filmriss-core     Farbmathematik, LUTs, Rezepte, Presets (ohne GPU/Kamera, getestet)
-crates/filmriss-camera   Kamera-Threads, Testbild, native Backends
-crates/filmriss-app      egui-App, wgpu-Shader, Editor, Aufnahme
+crates/filmriss-core     color math, LUTs, recipes, presets (no GPU/camera, tested)
+crates/filmriss-camera   camera threads, test pattern, native backends
+crates/filmriss-app      egui app, wgpu shader, editor, capture
 ```
 
 ```bash
-cargo test -p filmriss-core   # Tests der Farbpipeline
+cargo test -p filmriss-core   # color pipeline tests
 cargo clippy --workspace
 ```
 
-## Lizenz
+## License
 
-MIT oder Apache-2.0, nach Wahl.
+MIT or Apache-2.0, at your option.

@@ -1,7 +1,7 @@
-//! CPU-Referenzpipeline. Muss sich exakt so verhalten wie `preview.wgsl` in der App,
-//! damit das gespeicherte Foto genauso aussieht wie die Live-Preview.
+//! CPU reference pipeline. Must behave exactly like `preview.wgsl` in the app so
+//! the saved photo looks exactly like the live preview.
 //!
-//! Reihenfolge: LUT → Mischung mit Original (Intensität) → Vignette → Korn.
+//! Order: LUT → mix with original (intensity) → vignette → grain.
 
 use rayon::prelude::*;
 
@@ -10,7 +10,7 @@ use crate::lut::Lut3D;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LookParams {
-    /// 0 = Original, 1 = volle Simulation.
+    /// 0 = original, 1 = full simulation.
     pub intensity: f32,
     pub grain: f32,
     pub grain_size: f32,
@@ -30,7 +30,7 @@ impl Default for LookParams {
     }
 }
 
-/// Integer-Hash (lowbias32-Variante). Identisch im WGSL-Shader implementiert.
+/// Integer hash (lowbias32 variant). Implemented identically in the WGSL shader.
 #[inline]
 pub fn hash(x: u32, y: u32, seed: u32) -> u32 {
     let mut h = x.wrapping_mul(0x8da6_b343) ^ y.wrapping_mul(0xd816_3841) ^ seed.wrapping_mul(0xcb1a_b31f);
@@ -47,8 +47,8 @@ fn hash_signed(x: u32, y: u32, seed: u32) -> f32 {
     (hash(x, y, seed) >> 8) as f32 * (2.0 / 16_777_216.0) - 1.0
 }
 
-/// Weiches Wert-Rauschen (−1 … 1) – wirkt organischer als reines Pixelrauschen.
-/// `px`/`py` sind Bildkoordinaten in Pixeln (Pixelmitte = Index + 0.5).
+/// Smooth value noise (−1 … 1) – looks more organic than plain per-pixel noise.
+/// `px`/`py` are image coordinates in pixels (pixel center = index + 0.5).
 #[inline]
 pub fn grain_noise(px: f32, py: f32, size: f32, seed: u32) -> f32 {
     let gx = px / size.max(0.5);
@@ -66,7 +66,7 @@ pub fn grain_noise(px: f32, py: f32, size: f32, seed: u32) -> f32 {
     (a + (b - a) * uy) * 1.6
 }
 
-/// Bearbeitet einen einzelnen Pixel (sRGB 0..1).
+/// Processes a single pixel (sRGB 0..1).
 #[inline]
 pub fn shade(src: [f32; 3], lut: &Lut3D, px: f32, py: f32, width: f32, height: f32, p: &LookParams) -> [f32; 3] {
     let graded = lut.sample(src);
@@ -86,7 +86,7 @@ pub fn shade(src: [f32; 3], lut: &Lut3D, px: f32, py: f32, width: f32, height: f
 
     if p.grain > 0.0 {
         let l = (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).clamp(0.0, 1.0);
-        // Korn ist in den Mitteltönen am sichtbarsten, in Tiefen/Lichtern schwächer.
+        // Grain is most visible in the midtones, weaker in shadows/highlights.
         let amp = p.grain * 0.14 * (0.25 + 3.0 * l * (1.0 - l));
         let n = grain_noise(px, py, p.grain_size, p.seed) * amp;
         c = c.map(|x| x + n);
@@ -95,7 +95,7 @@ pub fn shade(src: [f32; 3], lut: &Lut3D, px: f32, py: f32, width: f32, height: f
     c.map(|x| x.clamp(0.0, 1.0))
 }
 
-/// Wendet den Look in-place auf ein RGBA8-Bild an (parallel über Zeilen).
+/// Applies the look in place to an RGBA8 image (parallel over rows).
 pub fn render_rgba8(pixels: &mut [u8], width: u32, height: u32, lut: &Lut3D, p: &LookParams) {
     let (w, h) = (width as f32, height as f32);
     pixels
@@ -113,7 +113,7 @@ pub fn render_rgba8(pixels: &mut [u8], width: u32, height: u32, lut: &Lut3D, p: 
         });
 }
 
-/// Schnelles Verkleinern (2×2-Mittelwert pro Zielpixel) für Vorschaubilder.
+/// Fast downscaling (2×2 average per target pixel) for thumbnails.
 pub fn downscale_rgba8(src: &[u8], width: u32, height: u32, tw: u32, th: u32) -> Vec<u8> {
     let mut out = vec![0u8; (tw * th * 4) as usize];
     let (w, h) = (width as usize, height as usize);

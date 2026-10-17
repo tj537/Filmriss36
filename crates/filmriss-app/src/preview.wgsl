@@ -1,22 +1,22 @@
-// Filmriss Live-Preview
+// Filmriss live preview
 //
-// Pro Pixel: Kamerabild sampeln → 3D-LUT (Hardware-trilinear) → Intensität → Vignette → Korn.
-// Muss sich exakt wie `filmriss_core::process::shade` verhalten (gleiche Formeln, gleicher Hash).
+// Per pixel: sample camera frame → 3D LUT (hardware trilinear) → intensity → vignette → grain.
+// Must behave exactly like `filmriss_core::process::shade` (same formulas, same hash).
 
 struct Uniforms {
-    // Kamerabild-Größe in Pixeln
+    // camera frame size in pixels
     tex_size: vec2<f32>,
     intensity: f32,
     grain: f32,
     grain_size: f32,
     vignette: f32,
-    // x < split → Original anzeigen (0 = aus, 1 = komplett Original)
+    // x < split → show original (0 = off, 1 = fully original)
     split: f32,
-    // 1 = horizontal spiegeln (Selfie-Ansicht)
+    // 1 = mirror horizontally (selfie view)
     mirror: f32,
     seed: u32,
     lut_size: f32,
-    // 1 = Zielformat ist *Srgb, Ausgabe muss linearisiert werden
+    // 1 = target format is *Srgb, output must be linearized
     linear_output: f32,
     _pad: f32,
 };
@@ -32,7 +32,7 @@ struct VsOut {
     @location(0) uv: vec2<f32>,
 };
 
-// Ein bildschirmfüllendes Dreieck; egui setzt den Viewport auf das Preview-Rechteck.
+// One full-screen triangle; egui sets the viewport to the preview rectangle.
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
     let x = f32((i << 1u) & 2u);
@@ -87,7 +87,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
     let src = textureSampleLevel(cam_tex, cam_sampler, uv, 0.0).rgb;
 
-    // Halbes Texel Versatz: Gitterpunkte der LUT liegen auf Texelmitten.
+    // Half-texel offset: LUT grid points sit on texel centers.
     let n = u.lut_size;
     let lut_coord = clamp(src, vec3<f32>(0.0), vec3<f32>(1.0)) * ((n - 1.0) / n) + 0.5 / n;
     let graded = textureSampleLevel(lut_tex, lut_sampler, lut_coord, 0.0).rgb;
@@ -108,7 +108,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         c = c + vec3<f32>(grain_noise(px, u.grain_size, u.seed) * amp);
     }
 
-    // Vorher/Nachher-Vergleich (in Bildschirmkoordinaten, nicht gespiegelt)
+    // Before/after comparison (in screen coordinates, not mirrored)
     if (in.uv.x < u.split) {
         c = src;
     }

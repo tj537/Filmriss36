@@ -1,5 +1,5 @@
-name = "Velvet Dia"
-description = "Kräftige, tiefe Farben und satter Kontrast für Landschaften (vgl. Velvia)."
+name = "Velvet Slide"
+description = "Rich, deep colors and punchy contrast for landscapes (cf. Velvia)."
 contrast = 0.35
 shadows = -0.2
 saturation = 0.35

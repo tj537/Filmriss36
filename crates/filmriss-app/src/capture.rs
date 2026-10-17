@@ -1,5 +1,5 @@
-//! Fotoaufnahme: volles Kamerabild durch die CPU-Pipeline (identisch zur GPU-Preview)
-//! und als JPEG speichern. Läuft in einem eigenen Thread, die UI bleibt flüssig.
+//! Photo capture: run the full camera frame through the CPU pipeline (identical to the
+//! GPU preview) and save it as JPEG. Runs on its own thread so the UI stays smooth.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -28,11 +28,11 @@ pub fn spawn(job: CaptureJob, done: Sender<CaptureResult>, ctx: egui::Context) {
             let _ = done.send(result);
             ctx.request_repaint();
         })
-        .expect("Capture-Thread konnte nicht gestartet werden");
+        .expect("failed to spawn capture thread");
 }
 
 fn run(job: &CaptureJob) -> anyhow::Result<PathBuf> {
-    std::fs::create_dir_all(&job.dir).with_context(|| format!("Ordner {} anlegen", job.dir.display()))?;
+    std::fs::create_dir_all(&job.dir).with_context(|| format!("create folder {}", job.dir.display()))?;
     let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let base = format!("FR_{stamp}_{}", slug(&job.simulation));
     let f = &job.frame;
@@ -40,7 +40,7 @@ fn run(job: &CaptureJob) -> anyhow::Result<PathBuf> {
     let t = std::time::Instant::now();
     let mut pixels = f.data.clone();
     process::render_rgba8(&mut pixels, f.width, f.height, &job.lut, &job.params);
-    log::info!("Look auf {}×{} angewendet in {:?}", f.width, f.height, t.elapsed());
+    log::info!("Applied look to {}×{} in {:?}", f.width, f.height, t.elapsed());
 
     let path = unique(&job.dir, &base, "jpg");
     write_jpeg(&path, &pixels, f.width, f.height)?;
@@ -57,11 +57,11 @@ fn run(job: &CaptureJob) -> anyhow::Result<PathBuf> {
 
 fn write_jpeg(path: &Path, rgba: &[u8], width: u32, height: u32) -> anyhow::Result<()> {
     let rgb: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
-    let file = std::fs::File::create(path).with_context(|| format!("{} anlegen", path.display()))?;
+    let file = std::fs::File::create(path).with_context(|| format!("create {}", path.display()))?;
     let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(file), 92);
     encoder
         .encode(&rgb, width, height, image::ExtendedColorType::Rgb8)
-        .context("JPEG kodieren")?;
+        .context("encode JPEG")?;
     Ok(())
 }
 

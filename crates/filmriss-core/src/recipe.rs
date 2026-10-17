@@ -1,15 +1,15 @@
-//! Film-Rezepte: eine Filmsimulation als Satz verständlicher Parameter.
+//! Film recipes: a film simulation as a set of understandable parameters.
 //!
-//! Ein Rezept wird nie pro Pixel ausgewertet, sondern einmalig in eine 3D-LUT
-//! "gebacken" ([`FilmRecipe::bake`]). Dadurch darf die Mathematik hier beliebig
-//! aufwendig sein (Oklab, Gamut-Mapping, Farbton-Kurven …) – die Live-Preview
-//! kostet trotzdem nur einen Texturzugriff pro Pixel.
+//! A recipe is never evaluated per pixel; it is "baked" once into a 3D LUT
+//! ([`FilmRecipe::bake`]). That's why the maths here may be as elaborate as needed
+//! (Oklab, gamut mapping, hue curves …) – the live preview still only costs one
+//! texture fetch per pixel.
 //!
-//! Rezepte werden als TOML gespeichert, fehlende Felder fallen auf neutrale Werte
-//! zurück. Ein minimales Rezept ist also z. B.:
+//! Recipes are stored as TOML; missing fields fall back to neutral values.
+//! A minimal recipe is therefore e.g.:
 //!
 //! ```toml
-//! name = "Mein Look"
+//! name = "My Look"
 //! contrast = 0.2
 //! saturation = -0.1
 //! ```
@@ -22,7 +22,7 @@ use crate::color::{
 };
 use crate::lut::Lut3D;
 
-/// Oklab-Helligkeit eines 18%-Graus – Drehpunkt der Kontrastkurve.
+/// Oklab lightness of 18% gray – pivot of the contrast curve.
 const MID_GREY_L: f32 = 0.565;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -31,54 +31,54 @@ pub struct FilmRecipe {
     pub name: String,
     pub description: String,
 
-    /// Optional: Dateiname einer `.cube`-LUT (im LUT-Ordner), die *vor* dem Rezept
-    /// angewendet wird. So lässt sich jede fremde LUT mit Reglern feintunen.
+    /// Optional: file name of a `.cube` LUT (in the LUT folder) applied *before* the
+    /// recipe. This lets you fine-tune any third-party LUT with sliders.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_lut: Option<String>,
 
-    /// Belichtungskorrektur in Blendenstufen (−2 … +2).
+    /// Exposure compensation in stops (−2 … +2).
     pub exposure: f32,
-    /// Weißabgleich-Verschiebung: + wärmer (gelb/rot), − kühler (blau). Bereich −1 … 1.
+    /// White balance shift: + warmer (yellow/red), − cooler (blue). Range −1 … 1.
     pub temperature: f32,
-    /// + Richtung Magenta, − Richtung Grün. Bereich −1 … 1.
+    /// + towards magenta, − towards green. Range −1 … 1.
     pub tint: f32,
 
-    /// S-Kurve: + mehr, − weniger Kontrast. Bereich −1 … 1.
+    /// S-curve: + more, − less contrast. Range −1 … 1.
     pub contrast: f32,
-    /// Lichter heller (+) oder weicher/dunkler (−). Bereich −1 … 1.
+    /// Highlights brighter (+) or softer/darker (−). Range −1 … 1.
     pub highlights: f32,
-    /// Schatten heller (+) oder tiefer (−). Bereich −1 … 1.
+    /// Shadows brighter (+) or deeper (−). Range −1 … 1.
     pub shadows: f32,
-    /// Angehobenes Schwarz ("Fade", ausgeblichener Abzug). Bereich 0 … 1.
+    /// Lifted blacks ("fade", faded print). Range 0 … 1.
     pub fade: f32,
 
-    /// Globale Sättigung. −1 = Graustufen, +1 = doppelte Chroma.
+    /// Global saturation. −1 = grayscale, +1 = double chroma.
     pub saturation: f32,
-    /// Farbton-/Sättigungs-/Helligkeitskorrektur pro Farbbereich.
+    /// Hue/saturation/lightness adjustment per color range.
     pub hues: HueAdjustments,
 
-    /// Schwarzweiß-Modus.
+    /// Black & white mode.
     pub monochrome: bool,
-    /// Kanalmischung für Schwarzweiß (linear RGB). Rotfilter = viel R, wenig B usw.
+    /// Channel mix for black & white (linear RGB). Red filter = lots of R, little B, etc.
     pub mono_mix: [f32; 3],
 
-    /// Tönung der Schatten (z. B. kühles Cyan bei Negativfilmen).
+    /// Shadow tint (e.g. cool cyan on negative films).
     pub shadow_tone: Tone,
-    /// Tönung der Lichter (z. B. warmes Bernstein).
+    /// Highlight tint (e.g. warm amber).
     pub highlight_tone: Tone,
 
-    /// Filmkorn-Stärke 0 … 1 (wird live im Shader erzeugt, nicht in der LUT).
+    /// Film grain strength 0 … 1 (generated live in the shader, not in the LUT).
     pub grain: f32,
-    /// Korngröße in Kamerapixeln (1 = fein, 3 = grob).
+    /// Grain size in camera pixels (1 = fine, 3 = coarse).
     pub grain_size: f32,
-    /// Vignette: + Ecken dunkler, − Ecken heller. Bereich −1 … 1 (Shader).
+    /// Vignette: + darker corners, − brighter corners. Range −1 … 1 (shader).
     pub vignette: f32,
 }
 
 impl Default for FilmRecipe {
     fn default() -> Self {
         Self {
-            name: "Ohne Namen".into(),
+            name: "Untitled".into(),
             description: String::new(),
             base_lut: None,
             exposure: 0.0,
@@ -101,7 +101,7 @@ impl Default for FilmRecipe {
     }
 }
 
-/// Farbtönung über einen Farbtonwinkel (Grad, Oklch) und eine Stärke 0 … 1.
+/// Color tint given by a hue angle (degrees, Oklch) and a strength 0 … 1.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Tone {
@@ -109,15 +109,15 @@ pub struct Tone {
     pub strength: f32,
 }
 
-/// Anpassung eines Farbbereichs.
+/// Adjustment of one color range.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HueBand {
-    /// Farbtonverschiebung in Grad (−30 … 30 ist sinnvoll).
+    /// Hue shift in degrees (−30 … 30 is sensible).
     pub hue: f32,
-    /// Sättigung −1 … 1.
+    /// Saturation −1 … 1.
     pub saturation: f32,
-    /// Helligkeit −1 … 1.
+    /// Lightness −1 … 1.
     pub lightness: f32,
 }
 
@@ -127,8 +127,8 @@ impl HueBand {
     }
 }
 
-/// Sieben Farbbereiche wie in Lightroom/Capture One. Die Zentren liegen auf den
-/// Oklch-Farbtönen der sRGB-Primär-/Sekundärfarben (+ Orange für Hauttöne).
+/// Seven color ranges as in Lightroom/Capture One. The centers sit on the Oklch
+/// hues of the sRGB primaries/secondaries (+ orange for skin tones).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HueAdjustments {
@@ -143,7 +143,7 @@ pub struct HueAdjustments {
 
 impl HueAdjustments {
     pub const CENTERS: [f32; 7] = [29.0, 55.0, 110.0, 142.0, 195.0, 264.0, 328.0];
-    pub const NAMES: [&'static str; 7] = ["Rot", "Orange", "Gelb", "Grün", "Cyan", "Blau", "Magenta"];
+    pub const NAMES: [&'static str; 7] = ["Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Magenta"];
 
     pub fn bands(&self) -> [&HueBand; 7] {
         [
@@ -173,8 +173,8 @@ impl HueAdjustments {
         self.bands().iter().all(|b| b.is_neutral())
     }
 
-    /// Interpoliert die Bandwerte für einen Farbton (Grad) – weiche Übergänge,
-    /// die Gewichte zweier Nachbarbänder summieren sich immer zu 1.
+    /// Interpolates the band values for a hue (degrees) – smooth transitions,
+    /// the weights of two neighboring bands always sum to 1.
     fn at(&self, hue_deg: f32) -> HueBand {
         let bands = self.bands();
         let h = hue_deg.rem_euclid(360.0);
@@ -214,10 +214,10 @@ impl FilmRecipe {
     }
 
     pub fn to_toml(&self) -> String {
-        toml::to_string_pretty(self).expect("Rezept ist immer serialisierbar")
+        toml::to_string_pretty(self).expect("a recipe is always serializable")
     }
 
-    /// Backt das Rezept (optional nach einer Basis-LUT) in eine 3D-LUT.
+    /// Bakes the recipe (optionally after a base LUT) into a 3D LUT.
     pub fn bake(&self, size: usize, base: Option<&Lut3D>) -> Lut3D {
         match base {
             Some(base) => Lut3D::from_fn(size, |c| self.apply(base.sample(c))),
@@ -225,11 +225,11 @@ impl FilmRecipe {
         }
     }
 
-    /// Wendet das Rezept auf eine sRGB-kodierte Farbe (0..1) an.
+    /// Applies the recipe to an sRGB-encoded color (0..1).
     pub fn apply(&self, srgb: [f32; 3]) -> [f32; 3] {
         let mut lin = srgb_to_linear3(srgb);
 
-        // 1) Belichtung + Weißabgleich (linear, wie in der Kamera)
+        // 1) Exposure + white balance (linear, like in the camera)
         let ev = 2f32.powf(self.exposure);
         let gains = [
             (0.18 * self.temperature).exp(),
@@ -241,7 +241,7 @@ impl FilmRecipe {
             lin[i] *= ev * gains[i] * norm;
         }
 
-        // 2) Schwarzweiß: Kanalmischer (Farbfilter-Effekt)
+        // 2) Black & white: channel mixer (color filter effect)
         if self.monochrome {
             let w = self.mono_mix;
             let sum = (w[0] + w[1] + w[2]).max(1e-4);
@@ -249,7 +249,7 @@ impl FilmRecipe {
             lin = [y, y, y];
         }
 
-        // 3) Alles Weitere in Oklch (Helligkeit, Chroma, Farbton getrennt)
+        // 3) Everything else in Oklch (lightness, chroma, hue separated)
         let [l, a, b] = linear_srgb_to_oklab(lin);
         let mut l = l.max(0.0);
         let mut chroma = (a * a + b * b).sqrt();
@@ -257,7 +257,7 @@ impl FilmRecipe {
 
         if !self.monochrome && !self.hues.is_neutral() {
             let band = self.hues.at(hue);
-            // Nahezu neutrale Farben sollen nicht eingefärbt/verschoben werden.
+            // Near-neutral colors must not be tinted/shifted.
             let colorful = smoothstep(0.0, 0.06, chroma);
             hue += band.hue * colorful;
             chroma *= (1.0 + band.saturation).max(0.0);
@@ -265,7 +265,7 @@ impl FilmRecipe {
         }
         chroma *= (1.0 + self.saturation).max(0.0);
 
-        // 4) Tonkurve auf der Helligkeit; Chroma wandert ein Stück mit (wie bei Film)
+        // 4) Tone curve on lightness; chroma partly follows along (as with film)
         let l_new = self.tone_curve(l);
         if l > 1e-4 {
             chroma *= (l_new / l).clamp(0.25, 4.0).sqrt();
@@ -276,7 +276,7 @@ impl FilmRecipe {
         let mut a = chroma * cos;
         let mut b = chroma * sin;
 
-        // 5) Split-Toning
+        // 5) Split toning
         let ws = 1.0 - smoothstep(0.0, MID_GREY_L + 0.1, l);
         let wh = smoothstep(MID_GREY_L - 0.1, 1.0, l);
         for (tone, w) in [(self.shadow_tone, ws), (self.highlight_tone, wh)] {
@@ -287,7 +287,7 @@ impl FilmRecipe {
             }
         }
 
-        // 6) zurück nach sRGB, mit weichem Gamut-Mapping statt hartem Clipping
+        // 6) back to sRGB, with soft gamut mapping instead of hard clipping
         let lin = gamut_map([l, a, b]);
         let out = linear_to_srgb3(lin);
         out.map(|v| v.clamp(0.0, 1.0))
@@ -297,7 +297,7 @@ impl FilmRecipe {
         let p = MID_GREY_L;
         let mut x = x.clamp(0.0, 1.0);
 
-        // Kontrast: Potenzkurve um den Mittelgrau-Punkt (stetig differenzierbar)
+        // Contrast: power curve around mid gray (continuously differentiable)
         if self.contrast != 0.0 {
             let e = 2f32.powf(self.contrast);
             x = if x < p {
@@ -322,8 +322,8 @@ impl FilmRecipe {
     }
 }
 
-/// Reduziert die Chroma, bis die Farbe in den sRGB-Farbraum passt (Farbton und
-/// Helligkeit bleiben erhalten). Liefert lineares sRGB.
+/// Reduces chroma until the color fits into the sRGB gamut (hue and lightness
+/// are preserved). Returns linear sRGB.
 fn gamut_map([l, a, b]: [f32; 3]) -> [f32; 3] {
     let in_gamut = |c: [f32; 3]| c.iter().all(|v| (-1e-4..=1.0 + 1e-4).contains(v));
     let rgb = oklab_to_linear_srgb([l, a, b]);
@@ -366,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn monochrome_is_grey() {
+    fn monochrome_is_gray() {
         let r = FilmRecipe {
             monochrome: true,
             ..Default::default()
@@ -400,7 +400,7 @@ mod tests {
                     let mut prev = -1.0;
                     for i in 0..=200 {
                         let y = r.tone_curve(i as f32 / 200.0);
-                        assert!(y >= prev - 1e-5, "nicht monoton bei {contrast} {hl} {sh}");
+                        assert!(y >= prev - 1e-5, "not monotonic at {contrast} {hl} {sh}");
                         prev = y;
                     }
                 }

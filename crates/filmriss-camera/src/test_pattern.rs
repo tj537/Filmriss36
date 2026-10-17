@@ -1,6 +1,6 @@
-//! Animiertes Testbild: ColorChecker-Felder, Farbrad, Grau- und Farbverläufe und eine
-//! wandernde "Sonne". Damit lassen sich Looks ohne Kamera beurteilen, und man sieht
-//! sofort, ob die Preview ruckelt.
+//! Animated test pattern: ColorChecker patches, color wheel, gray and hue ramps and a
+//! moving "sun". Lets you judge looks without a camera, and you immediately see
+//! whether the preview stutters.
 
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,7 @@ const W: u32 = 1280;
 const H: u32 = 720;
 const FPS: u32 = 30;
 
-/// sRGB-Näherungswerte des X-Rite ColorChecker Classic (24 Felder).
+/// Approximate sRGB values of the X-Rite ColorChecker Classic (24 patches).
 const CHECKER: [[u8; 3]; 24] = [
     [115, 82, 68],
     [194, 150, 130],
@@ -43,7 +43,7 @@ pub(crate) fn run(shared: &Shared) {
     shared.set_state(StreamState::Running {
         width: W,
         height: H,
-        format: "Testbild".into(),
+        format: "test pattern".into(),
     });
 
     let start = Instant::now();
@@ -83,7 +83,7 @@ fn hsv(h: f32, s: f32, v: f32) -> [u8; 3] {
 fn render_background() -> Vec<u8> {
     let mut buf = vec![0u8; (W * H * 4) as usize];
 
-    // Hintergrund: "Himmel" oben → warmer "Boden" unten
+    // Background: "sky" at the top → warm "ground" at the bottom
     for y in 0..H {
         let t = y as f32 / H as f32;
         let top = [70.0, 110.0, 160.0];
@@ -106,7 +106,7 @@ fn render_background() -> Vec<u8> {
         }
     }
 
-    // Farbrad (Farbton = Winkel, Sättigung = Radius)
+    // Color wheel (hue = angle, saturation = radius)
     let (cx, cy, r) = (985.0f32, 255.0f32, 200.0f32);
     for y in (cy - r) as u32..(cy + r) as u32 {
         for x in (cx - r) as u32..(cx + r) as u32 {
@@ -119,7 +119,7 @@ fn render_background() -> Vec<u8> {
         }
     }
 
-    // Grauverlauf und Farbtonverlauf
+    // Gray ramp and hue ramp
     for x in 0..W {
         let t = x as f32 / (W - 1) as f32;
         let g = (t * 255.0) as u8;

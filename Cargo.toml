@@ -29,7 +29,7 @@ egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
 egui-wgpu = "0.37"
 nokhwa = { version = "0.10", features = ["input-native"] }
 
-# Live-Preview soll auch im Debug-Build flüssig laufen: Abhängigkeiten immer optimieren.
+# Keep the live preview smooth even in debug builds: always optimize dependencies.
 [profile.dev.package."*"]
 opt-level = 3
 

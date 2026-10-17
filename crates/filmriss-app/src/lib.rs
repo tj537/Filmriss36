@@ -1,8 +1,8 @@
-//! Filmriss – Kamera-App mit Live-Filmsimulationen.
+//! Filmriss – camera app with live film simulations.
 //!
-//! UI: egui (Maus + Touch), Rendering: wgpu (Metal / Vulkan / DX12 / GL).
-//! Die App ist als Bibliothek aufgebaut, damit dieselbe Codebasis später auch als
-//! Android-`cdylib` (über `android_main`) gestartet werden kann.
+//! UI: egui (mouse + touch), rendering: wgpu (Metal / Vulkan / DX12 / GL).
+//! The app is structured as a library so the same codebase can later also be launched
+//! as an Android `cdylib` (via `android_main`).
 
 mod app;
 mod capture;
@@ -20,7 +20,7 @@ pub fn native_options() -> eframe::NativeOptions {
             .with_inner_size([1280.0, 820.0])
             .with_min_inner_size([480.0, 400.0]),
         renderer: eframe::Renderer::Wgpu,
-        // Kein MSAA nötig: das Preview-Dreieck füllt den Viewport komplett.
+        // No MSAA needed: the preview triangle covers the whole viewport.
         multisampling: 0,
         ..Default::default()
     }
@@ -30,7 +30,7 @@ pub fn run(options: eframe::NativeOptions) -> eframe::Result {
     eframe::run_native("Filmriss", options, Box::new(|cc| Ok(Box::new(FilmrissApp::new(cc)?))))
 }
 
-/// Einstiegspunkt für Android (noch nicht gebaut/getestet, siehe docs/ARCHITECTURE.md).
+/// Entry point for Android (not built/tested yet, see docs/ARCHITECTURE.md).
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 fn android_main(app: winit::platform::android::activity::AndroidApp) {
@@ -39,6 +39,6 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
         ..native_options()
     };
     if let Err(e) = run(options) {
-        log::error!("Filmriss beendet mit Fehler: {e}");
+        log::error!("Filmriss exited with error: {e}");
     }
 }

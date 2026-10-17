@@ -1,39 +1,42 @@
-//! Eingebaute Filmsimulationen.
+//! Built-in film simulations.
 //!
-//! Die Rezepte liegen als TOML in `crates/filmriss-core/presets/` und werden zur
-//! Compile-Zeit eingebettet. Sie dienen gleichzeitig als Vorlage für eigene Rezepte.
+//! The recipes live as TOML in `crates/filmriss-core/presets/` and are embedded at
+//! compile time. They also serve as templates for custom recipes.
 //!
-//! Hinweis: Die Namen sind bewusst eigene. Fujifilm-Simulationsnamen sind Marken,
-//! und Fujifilms Original-LUTs sind nicht öffentlich – die Looks hier sind eigene
-//! Interpretationen, die sich an den bekannten Charakteristika orientieren.
+//! Note: the names are deliberately our own. Fujifilm's simulation names are trademarks
+//! and Fujifilm's original LUTs are not public – the looks here are our own
+//! interpretations based on the well-known characteristics.
 
 use crate::recipe::FilmRecipe;
 
 const PRESETS: &[(&str, &str)] = &[
     ("standard", include_str!("../presets/01_standard.toml")),
-    ("velvet-dia", include_str!("../presets/02_velvet_dia.toml")),
-    ("sanftes-portrait", include_str!("../presets/03_sanftes_portrait.toml")),
-    ("chrome-doku", include_str!("../presets/04_chrome_doku.toml")),
-    ("negativ-klassik", include_str!("../presets/05_negativ_klassik.toml")),
-    ("negativ-portrait", include_str!("../presets/06_negativ_portrait.toml")),
-    ("kino-flach", include_str!("../presets/07_kino_flach.toml")),
+    ("velvet-slide", include_str!("../presets/02_velvet_slide.toml")),
+    ("soft-portrait", include_str!("../presets/03_soft_portrait.toml")),
+    ("chrome-docu", include_str!("../presets/04_chrome_docu.toml")),
+    ("classic-negative", include_str!("../presets/05_classic_negative.toml")),
+    (
+        "portrait-negative",
+        include_str!("../presets/06_portrait_negative.toml"),
+    ),
+    ("flat-cinema", include_str!("../presets/07_flat_cinema.toml")),
     ("bleach-bypass", include_str!("../presets/08_bleach_bypass.toml")),
-    ("nostalgie", include_str!("../presets/09_nostalgie.toml")),
-    ("natur", include_str!("../presets/10_natur.toml")),
-    ("sommer-gold", include_str!("../presets/11_sommer_gold.toml")),
+    ("nostalgia", include_str!("../presets/09_nostalgia.toml")),
+    ("natural", include_str!("../presets/10_natural.toml")),
+    ("summer-gold", include_str!("../presets/11_summer_gold.toml")),
     ("teal-orange", include_str!("../presets/12_teal_orange.toml")),
-    ("mono-fein", include_str!("../presets/13_mono_fein.toml")),
-    ("mono-rotfilter", include_str!("../presets/14_mono_rotfilter.toml")),
+    ("mono-fine", include_str!("../presets/13_mono_fine.toml")),
+    ("mono-red-filter", include_str!("../presets/14_mono_red_filter.toml")),
     ("sepia", include_str!("../presets/15_sepia.toml")),
 ];
 
-/// Alle eingebauten Rezepte (id, Rezept) in Anzeigereihenfolge.
+/// All built-in recipes (id, recipe) in display order.
 pub fn builtin() -> Vec<(&'static str, FilmRecipe)> {
     PRESETS
         .iter()
         .map(|(id, text)| {
             let recipe =
-                FilmRecipe::from_toml(text).unwrap_or_else(|e| panic!("eingebautes Rezept '{id}' ist ungültig: {e}"));
+                FilmRecipe::from_toml(text).unwrap_or_else(|e| panic!("built-in recipe '{id}' is invalid: {e}"));
             (*id, recipe)
         })
         .collect()

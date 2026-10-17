@@ -1,5 +1,5 @@
-name = "Sanftes Portrait"
-description = "Weiche Lichter, schmeichelnde Hauttöne, leicht kräftigerer Himmel (vgl. Astia)."
+name = "Soft Portrait"
+description = "Soft highlights, flattering skin tones, slightly stronger skies (cf. Astia)."
 temperature = 0.08
 contrast = -0.1
 highlights = -0.25

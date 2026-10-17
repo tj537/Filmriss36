@@ -1,6 +1,6 @@
 [package]
 name = "filmriss-core"
-description = "Farbpipeline, 3D-LUTs und Filmsimulations-Rezepte für Filmriss"
+description = "Color pipeline, 3D LUTs and film simulation recipes for Filmriss"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

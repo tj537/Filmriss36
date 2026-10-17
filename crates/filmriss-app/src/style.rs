@@ -1,8 +1,8 @@
-//! Look & Feel: dunkles Kamera-UI, große Touch-Ziele.
+//! Look & feel: dark camera UI, large touch targets.
 
 use egui::{Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle, Vec2};
 
-/// Warmes Orange – erinnert an die Signalfarbe alter Filmdosen.
+/// Warm orange – reminiscent of the signal color of old film canisters.
 pub const ACCENT: Color32 = Color32::from_rgb(255, 138, 61);
 pub const BG: Color32 = Color32::from_rgb(12, 12, 13);
 pub const PANEL: Color32 = Color32::from_rgb(22, 22, 24);
@@ -23,7 +23,7 @@ pub fn apply(ctx: &egui::Context) {
         let s = &mut style.spacing;
         s.item_spacing = Vec2::new(10.0, 8.0);
         s.button_padding = Vec2::new(12.0, 7.0);
-        // ≥ 32 pt hohe Bedienelemente – mit dem Finger gut treffbar
+        // Controls ≥ 32 pt tall – easy to hit with a finger
         s.interact_size = Vec2::new(40.0, 32.0);
         s.slider_width = 170.0;
         s.icon_width = 20.0;

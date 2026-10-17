@@ -1,5 +1,5 @@
-name = "Negativ Klassik"
-description = "Harter Kontrast, cyanfarbene Schatten, warme Lichter, petrolfarbenes Grün (vgl. Classic Neg)."
+name = "Classic Negative"
+description = "Hard contrast, cyan shadows, warm highlights, teal greens (cf. Classic Neg)."
 temperature = -0.03
 contrast = 0.3
 highlights = -0.2
