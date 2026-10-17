@@ -1,0 +1,18 @@
+name = "Sepia"
+description = "Toned black & white like an old print."
+monochrome = true
+contrast = 0.1
+highlights = -0.1
+fade = 0.15
+vignette = 0.3
+grain = 0.25
+grain_size = 2.0
+grain_roughness = 0.5
+
+[shadow_tone]
+hue = 50.0
+strength = 0.45
+
+[highlight_tone]
+hue = 80.0
+strength = 0.35

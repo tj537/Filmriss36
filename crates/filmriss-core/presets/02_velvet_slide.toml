@@ -1,0 +1,24 @@
+name = "Velvet Slide"
+description = "Rich, deep colors and punchy contrast for landscapes (cf. Velvia)."
+contrast = 0.35
+shadows = -0.2
+saturation = 0.35
+vignette = 0.15
+
+[hues.red]
+saturation = 0.1
+
+[hues.green]
+hue = -4.0
+saturation = 0.15
+
+[hues.blue]
+saturation = 0.2
+lightness = -0.25
+
+[hues.magenta]
+saturation = 0.15
+
+[shadow_tone]
+hue = 330.0
+strength = 0.15

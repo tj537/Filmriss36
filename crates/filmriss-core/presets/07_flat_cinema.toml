@@ -1,0 +1,26 @@
+name = "Flat Cinema"
+description = "Very flat, desaturated motion-picture look with cool shadows (cf. Eterna)."
+contrast = -0.35
+highlights = -0.2
+shadows = 0.15
+fade = 0.05
+saturation = -0.35
+grain = 0.15
+grain_size = 1.8
+grain_roughness = 0.4
+grain_chroma = 0.15
+
+[hues.orange]
+hue = -3.0
+
+[hues.green]
+hue = 10.0
+saturation = -0.1
+
+[shadow_tone]
+hue = 205.0
+strength = 0.25
+
+[highlight_tone]
+hue = 75.0
+strength = 0.1

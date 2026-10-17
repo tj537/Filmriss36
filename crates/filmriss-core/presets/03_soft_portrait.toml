@@ -1,0 +1,16 @@
+name = "Soft Portrait"
+description = "Soft highlights, flattering skin tones, slightly stronger skies (cf. Astia)."
+temperature = 0.08
+contrast = -0.1
+highlights = -0.25
+saturation = 0.1
+
+[hues.red]
+hue = 4.0
+
+[hues.orange]
+saturation = -0.05
+lightness = 0.15
+
+[hues.blue]
+saturation = 0.15

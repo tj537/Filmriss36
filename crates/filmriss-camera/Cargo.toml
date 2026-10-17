@@ -1,0 +1,15 @@
+[package]
+name = "filmriss-camera"
+description = "Camera abstraction for Filmriss (capture thread, test pattern, native backends)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Native cameras via nokhwa: AVFoundation (macOS), V4L2 (Linux/Raspberry Pi), MSMF (Windows).
+native = ["dep:nokhwa"]
+
+[dependencies]
+log.workspace = true
+nokhwa = { workspace = true, optional = true }

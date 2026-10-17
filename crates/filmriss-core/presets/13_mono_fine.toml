@@ -1,0 +1,10 @@
+name = "Mono Fine"
+description = "Fine-grained black & white with deep shadows and lots of detail (cf. Acros)."
+monochrome = true
+mono_mix = [0.3, 0.6, 0.1]
+contrast = 0.25
+highlights = 0.05
+shadows = -0.15
+grain = 0.3
+grain_size = 1.2
+grain_roughness = 0.8

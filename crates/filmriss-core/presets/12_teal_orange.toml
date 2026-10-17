@@ -1,0 +1,27 @@
+name = "Teal & Orange"
+description = "Blockbuster color scheme: teal shadows, warm skin tones."
+contrast = 0.2
+saturation = 0.05
+
+[hues.orange]
+saturation = 0.15
+
+[hues.yellow]
+hue = -10.0
+saturation = -0.1
+
+[hues.green]
+hue = 30.0
+saturation = -0.3
+
+[hues.blue]
+hue = -25.0
+saturation = -0.1
+
+[shadow_tone]
+hue = 210.0
+strength = 0.4
+
+[highlight_tone]
+hue = 60.0
+strength = 0.3
