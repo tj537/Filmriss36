@@ -1,0 +1,36 @@
+name = "Negativ Klassik"
+description = "Harter Kontrast, cyanfarbene Schatten, warme Lichter, petrolfarbenes Grün (vgl. Classic Neg)."
+temperature = -0.03
+contrast = 0.3
+highlights = -0.2
+shadows = -0.15
+fade = 0.08
+saturation = -0.1
+grain = 0.3
+
+[hues.red]
+hue = 8.0
+
+[hues.orange]
+hue = -3.0
+saturation = -0.1
+
+[hues.yellow]
+hue = -5.0
+saturation = 0.1
+
+[hues.green]
+hue = 25.0
+saturation = -0.15
+
+[hues.blue]
+hue = -8.0
+saturation = -0.1
+
+[shadow_tone]
+hue = 200.0
+strength = 0.35
+
+[highlight_tone]
+hue = 70.0
+strength = 0.25

@@ -1,0 +1,9 @@
+name = "Mono Fein"
+description = "Feinkörniges Schwarzweiß mit tiefen Schatten und viel Zeichnung (vgl. Acros)."
+monochrome = true
+mono_mix = [0.3, 0.6, 0.1]
+contrast = 0.25
+highlights = 0.05
+shadows = -0.15
+grain = 0.3
+grain_size = 1.2

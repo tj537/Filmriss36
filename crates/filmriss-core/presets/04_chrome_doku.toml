@@ -1,0 +1,26 @@
+name = "Chrome Doku"
+description = "Gedämpfte Farben, harte Schatten, cyanstichiges Blau – Reportage-Look (vgl. Classic Chrome)."
+contrast = 0.15
+highlights = -0.15
+shadows = -0.3
+saturation = -0.3
+grain = 0.15
+
+[hues.red]
+hue = 6.0
+saturation = -0.1
+
+[hues.yellow]
+saturation = -0.15
+
+[hues.green]
+hue = -8.0
+saturation = -0.25
+
+[hues.cyan]
+saturation = -0.1
+
+[hues.blue]
+hue = -12.0
+saturation = -0.15
+lightness = -0.15

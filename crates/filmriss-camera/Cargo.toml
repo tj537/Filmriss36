@@ -1,0 +1,15 @@
+[package]
+name = "filmriss-camera"
+description = "Kamera-Abstraktion für Filmriss (Capture-Thread, Testbild, native Backends)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Native Kameras über nokhwa: AVFoundation (macOS), V4L2 (Linux/Raspberry Pi), MSMF (Windows).
+native = ["dep:nokhwa"]
+
+[dependencies]
+log.workspace = true
+nokhwa = { workspace = true, optional = true }

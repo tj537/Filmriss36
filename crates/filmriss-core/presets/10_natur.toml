@@ -1,0 +1,12 @@
+name = "Natur"
+description = "Natürliche, farbtreue Wiedergabe mit etwas mehr Biss (vgl. Reala Ace)."
+contrast = 0.2
+highlights = -0.05
+saturation = 0.08
+
+[hues.orange]
+saturation = -0.03
+
+[hues.green]
+hue = 4.0
+saturation = 0.05

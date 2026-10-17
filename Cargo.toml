@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = ["crates/filmriss-core", "crates/filmriss-camera", "crates/filmriss-app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tj537/filmriss36"
+rust-version = "1.88"
+
+[workspace.dependencies]
+filmriss-core = { path = "crates/filmriss-core" }
+filmriss-camera = { path = "crates/filmriss-camera" }
+
+anyhow = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+rayon = "1"
+half = { version = "2", features = ["bytemuck"] }
+bytemuck = { version = "1", features = ["derive"] }
+directories = "6"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "persistence", "wayland", "x11"] }
+egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
+egui-wgpu = "0.37"
+nokhwa = { version = "0.10", features = ["input-native"] }
+
+# Live-Preview soll auch im Debug-Build flüssig laufen: Abhängigkeiten immer optimieren.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

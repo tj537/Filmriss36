@@ -1,0 +1,12 @@
+name = "Bleach Bypass"
+description = "Silberreicher Entwicklungs-Look: hoher Kontrast, kaum Farbe, metallisch."
+contrast = 0.55
+highlights = 0.1
+shadows = -0.2
+saturation = -0.6
+grain = 0.25
+vignette = 0.2
+
+[shadow_tone]
+hue = 220.0
+strength = 0.08

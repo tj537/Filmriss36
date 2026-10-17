@@ -1,0 +1,22 @@
+name = "Kino Flach"
+description = "Sehr flacher, entsättigter Kinofilm-Look mit kühlen Schatten (vgl. Eterna)."
+contrast = -0.35
+highlights = -0.2
+shadows = 0.15
+fade = 0.05
+saturation = -0.35
+
+[hues.orange]
+hue = -3.0
+
+[hues.green]
+hue = 10.0
+saturation = -0.1
+
+[shadow_tone]
+hue = 205.0
+strength = 0.25
+
+[highlight_tone]
+hue = 75.0
+strength = 0.1

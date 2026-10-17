@@ -1,0 +1,23 @@
+name = "Sommer Gold"
+description = "Warmes, goldenes Licht und leuchtende Hauttöne – Sommerabend auf Farbnegativ."
+temperature = 0.15
+contrast = 0.1
+highlights = -0.1
+fade = 0.04
+saturation = 0.15
+grain = 0.15
+
+[hues.orange]
+saturation = 0.15
+lightness = 0.05
+
+[hues.yellow]
+hue = -6.0
+saturation = 0.1
+
+[hues.blue]
+saturation = -0.1
+
+[highlight_tone]
+hue = 65.0
+strength = 0.25

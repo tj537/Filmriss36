@@ -1,0 +1,16 @@
+name = "Sepia"
+description = "Getöntes Schwarzweiß wie ein alter Abzug."
+monochrome = true
+contrast = 0.1
+highlights = -0.1
+fade = 0.15
+grain = 0.25
+vignette = 0.3
+
+[shadow_tone]
+hue = 50.0
+strength = 0.45
+
+[highlight_tone]
+hue = 80.0
+strength = 0.35

@@ -1,0 +1,14 @@
+name = "Negativ Portrait"
+description = "Flach, ehrlich und hautfreundlich – viel Spielraum in den Tönen (vgl. Pro Neg. Std)."
+temperature = 0.03
+contrast = -0.2
+highlights = -0.1
+saturation = -0.15
+
+[hues.orange]
+saturation = -0.05
+lightness = 0.1
+
+[shadow_tone]
+hue = 230.0
+strength = 0.08
