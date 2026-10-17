@@ -1,5 +1,10 @@
 # Filmriss 🎞️
 
+> [!WARNING]
+> **Work in progress.** Filmriss is an early development version, not a finished app. Things break,
+> settings and file formats may still change, and there are **no prebuilt downloads** yet – you build it
+> from source (see *Quick start*). Releases are snapshots of the current state, not stable versions.
+
 A fast, open camera app with **live film simulations** – written in Rust.
 Runs on macOS, Linux (including Raspberry Pi) and Windows; Android is prepared.
 
@@ -12,7 +17,17 @@ Runs on macOS, Linux (including Raspberry Pi) and Windows; Android is prepared.
 - **Exposure modes AUTO / A / M**: exposure compensation and white balance everywhere, plus the camera's hardware controls in M (where the camera exposes them)
 - **Touch and mouse**: swipe to switch, hold for before/after, large controls
 
-> Status: early development version. Primary test target is macOS.
+### Status
+
+Primary test target is macOS. Tested so far on a MacBook Pro (M1 Pro, built-in FaceTime HD camera):
+
+| Area | State |
+|---|---|
+| Live preview with the Mac camera (1080p @ 30 fps), film simulations | ✅ works |
+| Exposure modes AUTO / A / M | ✅ works – Mac cameras offer only a few hardware controls in M |
+| Full-resolution photos on a real Mac camera | ⚠️ not tested yet |
+| Linux / Raspberry Pi / Windows | ⚠️ not tested on real hardware yet |
+| Android | 🚧 prepared, no camera backend yet |
 
 ## Quick start (macOS)
 
