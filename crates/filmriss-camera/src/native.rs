@@ -190,6 +190,11 @@ fn read_controls(cam: &Camera) -> (Vec<KnownCameraControl>, Vec<HwControl>) {
     let mut known = Vec::new();
     let mut controls = Vec::new();
     for c in list {
+        // nokhwa's AVFoundation backend inverts the flags of this control: it reports it as
+        // writable exactly when the camera does not support it, and setting it then throws.
+        if cfg!(target_os = "macos") && c.name() == "DistortionCorrection" {
+            continue;
+        }
         let kind = match c.description().clone() {
             ControlValueDescription::IntegerRange {
                 min,
@@ -265,7 +270,17 @@ fn open(index: &NativeIndex) -> Result<Camera, nokhwa::NokhwaError> {
         NativeIndex::Index(i) => CameraIndex::Index(*i),
         NativeIndex::Name(s) => CameraIndex::String(s.clone()),
     };
-    let mut cam = Camera::new(index, RequestedFormat::new::<RgbAFormat>(RequestedFormatType::None))?;
+    // AVFoundation lists every frame-rate range as two formats (min and max fps) but only
+    // accepts the max – `None` takes the first one (e.g. 1080p@15) and fails on Mac cameras.
+    // The highest frame rate is always a range maximum, so open with that.
+    let mut cam = Camera::new(
+        index.clone(),
+        RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
+    )
+    .or_else(|e| {
+        log::warn!("opening at the highest frame rate failed ({e}), trying the default format");
+        Camera::new(index, RequestedFormat::new::<RgbAFormat>(RequestedFormatType::None))
+    })?;
 
     // Own format choice: smooth (≥ 24 fps) beats resolution, target is ~1080p.
     match cam.compatible_camera_formats() {
