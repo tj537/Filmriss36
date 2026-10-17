@@ -10,12 +10,14 @@
 //! - [`CameraId::Native`] (feature `native`): nokhwa → AVFoundation / V4L2 / MSMF
 //! - planned: Android (Camera2 NDK), Raspberry Pi (libcamera) – see `docs/ARCHITECTURE.md`
 
+mod controls;
 mod frame;
 #[cfg(feature = "native")]
 mod native;
 mod stream;
 mod test_pattern;
 
+pub use controls::{HwControl, HwControlKind, HwValue};
 pub use frame::Frame;
 pub use stream::{CameraStream, Notify, StreamState};
 

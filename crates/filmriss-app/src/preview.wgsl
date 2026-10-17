@@ -1,6 +1,7 @@
 // Filmriss live preview
 //
-// Per pixel: sample camera frame → 3D LUT (hardware trilinear) → intensity → vignette → grain.
+// Per pixel: sample camera frame → camera gains (exposure/white balance) → 3D LUT
+// (hardware trilinear) → intensity → vignette → grain.
 // Must behave exactly like `filmriss_core::process::shade` (same formulas, same hash).
 
 struct Uniforms {
@@ -8,6 +9,7 @@ struct Uniforms {
     tex_size: vec2<f32>,
     intensity: f32,
     grain: f32,
+    // grain size in 1080p pixels (scaled with the frame height)
     grain_size: f32,
     vignette: f32,
     // x < split → show original (0 = off, 1 = fully original)
@@ -18,7 +20,14 @@ struct Uniforms {
     lut_size: f32,
     // 1 = target format is *Srgb, output must be linearized
     linear_output: f32,
-    _pad: f32,
+    grain_roughness: f32,
+    // linear gains for digital exposure compensation / white balance
+    pre_gain: vec3<f32>,
+    grain_chroma: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32,
 };
 
 @group(0) @binding(0) var cam_tex: texture_2d<f32>;
@@ -57,8 +66,8 @@ fn hash_signed(x: u32, y: u32, seed: u32) -> f32 {
     return f32(hash(x, y, seed) >> 8u) * (2.0 / 16777216.0) - 1.0;
 }
 
-fn grain_noise(p: vec2<f32>, size: f32, seed: u32) -> f32 {
-    let g = p / max(size, 0.5);
+fn value_noise(p: vec2<f32>, size: f32, seed: u32) -> f32 {
+    let g = p / size;
     let i = floor(g);
     let f = g - i;
     let s = f * f * (3.0 - 2.0 * f);
@@ -70,7 +79,16 @@ fn grain_noise(p: vec2<f32>, size: f32, seed: u32) -> f32 {
     let n11 = hash_signed(x0 + 1u, y0 + 1u, seed);
     let a = mix(n00, n10, s.x);
     let b = mix(n01, n11, s.x);
-    return mix(a, b, s.y) * 1.6;
+    return mix(a, b, s.y);
+}
+
+// Two octaves; roughness blends in the finer one (soft → crunchy grain).
+fn grain_noise(p: vec2<f32>, size_in: f32, roughness: f32, seed: u32) -> f32 {
+    let size = max(size_in, 0.5);
+    let coarse = value_noise(p, size, seed);
+    let fine = value_noise(p, size * 0.5, seed ^ 0x5bd1e995u);
+    let rough = (coarse * 0.6 + fine * 0.8) * 1.25;
+    return mix(coarse, rough, roughness) * 1.6;
 }
 
 fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
@@ -79,13 +97,22 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
     return select(hi, lo, c <= vec3<f32>(0.04045));
 }
 
+fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(hi, lo, c <= vec3<f32>(0.0031308));
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var uv = in.uv;
     if (u.mirror > 0.5) {
         uv.x = 1.0 - uv.x;
     }
-    let src = textureSampleLevel(cam_tex, cam_sampler, uv, 0.0).rgb;
+    var src = textureSampleLevel(cam_tex, cam_sampler, uv, 0.0).rgb;
+    if (any(u.pre_gain != vec3<f32>(1.0))) {
+        src = linear_to_srgb(clamp(srgb_to_linear(src) * u.pre_gain, vec3<f32>(0.0), vec3<f32>(1.0)));
+    }
 
     // Half-texel offset: LUT grid points sit on texel centers.
     let n = u.lut_size;
@@ -105,7 +132,18 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (u.grain > 0.0) {
         let l = clamp(dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
         let amp = u.grain * 0.14 * (0.25 + 3.0 * l * (1.0 - l));
-        c = c + vec3<f32>(grain_noise(px, u.grain_size, u.seed) * amp);
+        let size = u.grain_size * u.tex_size.y / 1080.0;
+        let mono = grain_noise(px, size, u.grain_roughness, u.seed);
+        if (u.grain_chroma > 0.0) {
+            let own = vec3<f32>(
+                grain_noise(px, size, u.grain_roughness, u.seed + 1u),
+                grain_noise(px, size, u.grain_roughness, u.seed + 2u),
+                grain_noise(px, size, u.grain_roughness, u.seed + 3u),
+            );
+            c = c + mix(vec3<f32>(mono), own, u.grain_chroma) * amp;
+        } else {
+            c = c + vec3<f32>(mono * amp);
+        }
     }
 
     // Before/after comparison (in screen coordinates, not mirrored)

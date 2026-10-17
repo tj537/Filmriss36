@@ -4,6 +4,9 @@ temperature = 0.03
 contrast = -0.2
 highlights = -0.1
 saturation = -0.15
+grain = 0.1
+grain_roughness = 0.3
+grain_chroma = 0.2
 
 [hues.orange]
 saturation = -0.05

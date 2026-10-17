@@ -4,8 +4,10 @@ contrast = 0.55
 highlights = 0.1
 shadows = -0.2
 saturation = -0.6
-grain = 0.25
 vignette = 0.2
+grain = 0.25
+grain_roughness = 0.8
+grain_chroma = 0.05
 
 [shadow_tone]
 hue = 220.0

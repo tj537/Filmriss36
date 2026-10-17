@@ -18,7 +18,8 @@ pub struct CaptureJob {
     pub save_original: bool,
 }
 
-pub type CaptureResult = Result<PathBuf, String>;
+/// Saved file plus the photo's resolution.
+pub type CaptureResult = Result<(PathBuf, u32, u32), String>;
 
 pub fn spawn(job: CaptureJob, done: Sender<CaptureResult>, ctx: egui::Context) {
     std::thread::Builder::new()
@@ -31,7 +32,7 @@ pub fn spawn(job: CaptureJob, done: Sender<CaptureResult>, ctx: egui::Context) {
         .expect("failed to spawn capture thread");
 }
 
-fn run(job: &CaptureJob) -> anyhow::Result<PathBuf> {
+fn run(job: &CaptureJob) -> anyhow::Result<(PathBuf, u32, u32)> {
     std::fs::create_dir_all(&job.dir).with_context(|| format!("create folder {}", job.dir.display()))?;
     let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let base = format!("FR_{stamp}_{}", slug(&job.simulation));
@@ -52,7 +53,7 @@ fn run(job: &CaptureJob) -> anyhow::Result<PathBuf> {
             f.height,
         )?;
     }
-    Ok(path)
+    Ok((path, f.width, f.height))
 }
 
 fn write_jpeg(path: &Path, rgba: &[u8], width: u32, height: u32) -> anyhow::Result<()> {

@@ -27,8 +27,32 @@ pub struct Uniforms {
     pub seed: u32,
     pub lut_size: f32,
     pub linear_output: f32,
-    pub _pad: f32,
+    pub grain_roughness: f32,
+    pub pre_gain: [f32; 3],
+    pub grain_chroma: f32,
+    pub _pad: [f32; 4],
 }
+
+impl Uniforms {
+    pub fn from_look(p: &filmriss_core::LookParams, split: f32, mirror: bool) -> Self {
+        Self {
+            intensity: p.intensity,
+            grain: p.grain,
+            grain_size: p.grain_size,
+            grain_roughness: p.grain_roughness,
+            grain_chroma: p.grain_chroma,
+            vignette: p.vignette,
+            pre_gain: p.pre_gain,
+            seed: p.seed,
+            split,
+            mirror: if mirror { 1.0 } else { 0.0 },
+            ..Default::default()
+        }
+    }
+}
+
+// Must match the WGSL struct layout (80 bytes, vec3 at offset 48).
+const _: () = assert!(std::mem::size_of::<Uniforms>() == 80);
 
 /// A camera frame plus an app-wide unique ID (frame numbers restart per stream).
 #[derive(Clone)]

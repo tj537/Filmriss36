@@ -1,21 +1,35 @@
 //! CPU reference pipeline. Must behave exactly like `preview.wgsl` in the app so
 //! the saved photo looks exactly like the live preview.
 //!
-//! Order: LUT → mix with original (intensity) → vignette → grain.
+//! Order: camera gains (exposure/white balance) → LUT → mix with original (intensity)
+//! → vignette → grain.
 
 use rayon::prelude::*;
 
-use crate::color::smoothstep;
+use crate::color::{linear_to_srgb, luminance, smoothstep, srgb_to_linear};
 use crate::lut::Lut3D;
+
+/// Image height the grain size refers to. Grain is specified in "1080p pixels" so it looks
+/// the same in the ~1080p preview and in a full-resolution (e.g. 4K) photo.
+pub const GRAIN_REFERENCE_HEIGHT: f32 = 1080.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LookParams {
     /// 0 = original, 1 = full simulation.
     pub intensity: f32,
+    /// Grain amount 0 … 1.
     pub grain: f32,
+    /// Grain size in 1080p pixels.
     pub grain_size: f32,
+    /// 0 = soft, round grain; 1 = crisp, crunchy grain.
+    pub grain_roughness: f32,
+    /// 0 = monochrome grain; 1 = fully colored grain (independent per channel).
+    pub grain_chroma: f32,
     pub vignette: f32,
     pub seed: u32,
+    /// Linear-light gains applied to the camera image before the look
+    /// (digital exposure compensation and white balance, see [`camera_gains`]).
+    pub pre_gain: [f32; 3],
 }
 
 impl Default for LookParams {
@@ -24,10 +38,26 @@ impl Default for LookParams {
             intensity: 1.0,
             grain: 0.0,
             grain_size: 1.5,
+            grain_roughness: 0.5,
+            grain_chroma: 0.0,
             vignette: 0.0,
             seed: 0,
+            pre_gain: [1.0; 3],
         }
     }
+}
+
+/// Linear RGB gains for exposure compensation (EV) and a white balance shift.
+/// `temperature`: + warmer, − cooler; `tint`: + magenta, − green (both −1 … 1).
+/// The white balance part is luminance-neutral, only `ev` changes brightness.
+pub fn camera_gains(ev: f32, temperature: f32, tint: f32) -> [f32; 3] {
+    let wb = [
+        (0.18 * temperature).exp(),
+        (-0.12 * tint).exp(),
+        (-0.18 * temperature).exp(),
+    ];
+    let k = 2f32.powf(ev) / luminance(wb);
+    wb.map(|g| g * k)
 }
 
 /// Integer hash (lowbias32 variant). Implemented identically in the WGSL shader.
@@ -47,12 +77,11 @@ fn hash_signed(x: u32, y: u32, seed: u32) -> f32 {
     (hash(x, y, seed) >> 8) as f32 * (2.0 / 16_777_216.0) - 1.0
 }
 
-/// Smooth value noise (−1 … 1) – looks more organic than plain per-pixel noise.
-/// `px`/`py` are image coordinates in pixels (pixel center = index + 0.5).
+/// Smooth value noise (−1 … 1) on a grid with cell size `size` pixels.
 #[inline]
-pub fn grain_noise(px: f32, py: f32, size: f32, seed: u32) -> f32 {
-    let gx = px / size.max(0.5);
-    let gy = py / size.max(0.5);
+fn value_noise(px: f32, py: f32, size: f32, seed: u32) -> f32 {
+    let gx = px / size;
+    let gy = py / size;
     let (ix, iy) = (gx.floor(), gy.floor());
     let (fx, fy) = (gx - ix, gy - iy);
     let (ux, uy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
@@ -63,12 +92,32 @@ pub fn grain_noise(px: f32, py: f32, size: f32, seed: u32) -> f32 {
     let n11 = hash_signed(x0.wrapping_add(1), y0.wrapping_add(1), seed);
     let a = n00 + (n10 - n00) * ux;
     let b = n01 + (n11 - n01) * ux;
-    (a + (b - a) * uy) * 1.6
+    a + (b - a) * uy
+}
+
+/// Film grain field (roughly −1 … 1): two octaves of value noise. `roughness` blends in
+/// the finer octave, which turns soft, round grain into crisp, crunchy grain.
+/// `px`/`py` are image coordinates in pixels (pixel center = index + 0.5),
+/// `size` is the grain size in pixels of *this* image.
+#[inline]
+pub fn grain_noise(px: f32, py: f32, size: f32, roughness: f32, seed: u32) -> f32 {
+    let size = size.max(0.5);
+    let coarse = value_noise(px, py, size, seed);
+    let fine = value_noise(px, py, size * 0.5, seed ^ 0x5bd1_e995);
+    let rough = (coarse * 0.6 + fine * 0.8) * 1.25;
+    (coarse + (rough - coarse) * roughness) * 1.6
 }
 
 /// Processes a single pixel (sRGB 0..1).
 #[inline]
 pub fn shade(src: [f32; 3], lut: &Lut3D, px: f32, py: f32, width: f32, height: f32, p: &LookParams) -> [f32; 3] {
+    let mut src = src;
+    if p.pre_gain != [1.0; 3] {
+        for (v, g) in src.iter_mut().zip(p.pre_gain) {
+            *v = linear_to_srgb((srgb_to_linear(*v) * g).clamp(0.0, 1.0));
+        }
+    }
+
     let graded = lut.sample(src);
     let mut c = [0.0; 3];
     for i in 0..3 {
@@ -88,8 +137,16 @@ pub fn shade(src: [f32; 3], lut: &Lut3D, px: f32, py: f32, width: f32, height: f
         let l = (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).clamp(0.0, 1.0);
         // Grain is most visible in the midtones, weaker in shadows/highlights.
         let amp = p.grain * 0.14 * (0.25 + 3.0 * l * (1.0 - l));
-        let n = grain_noise(px, py, p.grain_size, p.seed) * amp;
-        c = c.map(|x| x + n);
+        let size = p.grain_size * height / GRAIN_REFERENCE_HEIGHT;
+        let mono = grain_noise(px, py, size, p.grain_roughness, p.seed);
+        if p.grain_chroma > 0.0 {
+            for (i, ch) in c.iter_mut().enumerate() {
+                let own = grain_noise(px, py, size, p.grain_roughness, p.seed.wrapping_add(1 + i as u32));
+                *ch += (mono + (own - mono) * p.grain_chroma) * amp;
+            }
+        } else {
+            c = c.map(|x| x + mono * amp);
+        }
     }
 
     c.map(|x| x.clamp(0.0, 1.0))
@@ -156,11 +213,21 @@ mod tests {
         let mut max = f32::MIN;
         for y in 0..64 {
             for x in 0..64 {
-                let n = grain_noise(x as f32 + 0.5, y as f32 + 0.5, 1.5, 42);
+                let n = grain_noise(x as f32 + 0.5, y as f32 + 0.5, 1.5, 0.5, 42);
                 min = min.min(n);
                 max = max.max(n);
             }
         }
-        assert!(min >= -1.7 && max <= 1.7 && max - min > 1.0);
+        assert!(min >= -2.2 && max <= 2.2 && max - min > 1.0);
+    }
+
+    #[test]
+    fn camera_gains_neutral_and_ev() {
+        assert_eq!(camera_gains(0.0, 0.0, 0.0).map(|g| (g * 1e4).round()), [1e4; 3]);
+        let g = camera_gains(1.0, 0.5, -0.3);
+        assert!(
+            (luminance(g) - 2.0).abs() < 1e-4,
+            "white balance must be luminance-neutral"
+        );
     }
 }

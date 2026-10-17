@@ -61,9 +61,32 @@ pub fn show(ui: &mut Ui, r: &mut FilmRecipe) -> bool {
         changed |= tone(ui, "Highlights", &mut r.highlight_tone);
     });
 
-    section(ui, "Grain & vignette", true, |ui| {
-        changed |= slider(ui, "Grain", &mut r.grain, 0.0..=1.0, 0.0);
-        changed |= slider(ui, "Grain size", &mut r.grain_size, 0.75..=4.0, 1.5);
+    section(ui, "Grain", true, |ui| {
+        // Quick presets in the spirit of in-camera grain settings
+        ui.horizontal_wrapped(|ui| {
+            for (label, amount) in [("Off", 0.0), ("Weak", 0.2), ("Strong", 0.45)] {
+                if ui.selectable_label((r.grain - amount).abs() < 1e-3, label).clicked() {
+                    r.grain = amount;
+                    changed = true;
+                }
+            }
+            ui.separator();
+            for (label, size) in [("Small", 1.2), ("Large", 2.4)] {
+                if ui.selectable_label((r.grain_size - size).abs() < 1e-3, label).clicked() {
+                    r.grain_size = size;
+                    changed = true;
+                }
+            }
+        });
+        changed |= slider(ui, "Amount", &mut r.grain, 0.0..=1.0, 0.0);
+        changed |= slider(ui, "Size", &mut r.grain_size, 0.75..=4.0, 1.5);
+        changed |= slider(ui, "Roughness", &mut r.grain_roughness, 0.0..=1.0, 0.5);
+        if !r.monochrome {
+            changed |= slider(ui, "Color grain", &mut r.grain_chroma, 0.0..=1.0, 0.0);
+        }
+    });
+
+    section(ui, "Vignette", true, |ui| {
         changed |= slider(ui, "Vignette", &mut r.vignette, -1.0..=1.0, 0.0);
     });
 

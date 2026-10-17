@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::controls::{Command, HwControl, HwValue};
 use crate::{CameraDescriptor, CameraId, Frame};
 
 /// Called after every new frame (e.g. `egui::Context::request_repaint`).
@@ -19,8 +20,11 @@ const POOL_SIZE: usize = 4;
 
 pub(crate) struct Shared {
     latest: Mutex<Option<Frame>>,
+    still: Mutex<Option<Result<Frame, String>>>,
     pool: Mutex<Vec<Vec<u8>>>,
     state: Mutex<StreamState>,
+    controls: Mutex<Vec<HwControl>>,
+    commands: Mutex<Vec<Command>>,
     stop: AtomicBool,
     seq: AtomicU64,
     notify: Notify,
@@ -39,6 +43,15 @@ impl Shared {
         (self.notify)();
     }
 
+    pub(crate) fn take_commands(&self) -> Vec<Command> {
+        std::mem::take(&mut *self.commands.lock().unwrap())
+    }
+
+    pub(crate) fn set_controls(&self, controls: Vec<HwControl>) {
+        *self.controls.lock().unwrap() = controls;
+        (self.notify)();
+    }
+
     /// Gets a (recycled) buffer of exactly `len` bytes.
     pub(crate) fn buffer(&self, len: usize) -> Vec<u8> {
         let mut buf = self.pool.lock().unwrap().pop().unwrap_or_default();
@@ -53,19 +66,30 @@ impl Shared {
         }
     }
 
-    pub(crate) fn publish(&self, width: u32, height: u32, data: Vec<u8>) {
+    fn frame(&self, width: u32, height: u32, data: Vec<u8>) -> Frame {
         debug_assert_eq!(data.len(), (width * height * 4) as usize);
-        let frame = Frame {
+        Frame {
             width,
             height,
             data,
             seq: self.seq.fetch_add(1, Ordering::Relaxed) + 1,
             timestamp: Instant::now(),
-        };
+        }
+    }
+
+    pub(crate) fn publish(&self, width: u32, height: u32, data: Vec<u8>) {
+        let frame = self.frame(width, height, data);
         let dropped = self.latest.lock().unwrap().replace(frame);
         if let Some(old) = dropped {
             self.recycle(old.data);
         }
+        (self.notify)();
+    }
+
+    /// Delivers the result of a [`Command::CaptureStill`].
+    pub(crate) fn publish_still(&self, result: Result<(u32, u32, Vec<u8>), String>) {
+        let still = result.map(|(w, h, data)| self.frame(w, h, data));
+        *self.still.lock().unwrap() = Some(still);
         (self.notify)();
     }
 }
@@ -82,8 +106,11 @@ impl CameraStream {
     pub fn open(descriptor: CameraDescriptor, notify: Notify) -> Self {
         let shared = Arc::new(Shared {
             latest: Mutex::new(None),
+            still: Mutex::new(None),
             pool: Mutex::new(Vec::new()),
             state: Mutex::new(StreamState::Starting),
+            controls: Mutex::new(Vec::new()),
+            commands: Mutex::new(Vec::new()),
             stop: AtomicBool::new(false),
             seq: AtomicU64::new(0),
             notify,
@@ -126,6 +153,34 @@ impl CameraStream {
 
     pub fn state(&self) -> StreamState {
         self.shared.state.lock().unwrap().clone()
+    }
+
+    /// Asks the camera for one frame at its highest resolution. The preview pauses briefly
+    /// while the camera switches formats. The result arrives via [`Self::take_still`].
+    pub fn request_still(&self) {
+        *self.shared.still.lock().unwrap() = None;
+        self.shared.commands.lock().unwrap().push(Command::CaptureStill);
+    }
+
+    pub fn take_still(&self) -> Option<Result<Frame, String>> {
+        self.shared.still.lock().unwrap().take()
+    }
+
+    /// Hardware controls the camera reports (may be empty).
+    pub fn controls(&self) -> Vec<HwControl> {
+        self.shared.controls.lock().unwrap().clone()
+    }
+
+    pub fn set_control(&self, id: usize, value: HwValue) {
+        let mut commands = self.shared.commands.lock().unwrap();
+        // Only the newest value per control matters (sliders send many updates).
+        commands.retain(|c| !matches!(c, Command::SetControl(other, _) if *other == id));
+        commands.push(Command::SetControl(id, value));
+    }
+
+    /// Back to camera automatic: every control to its default.
+    pub fn reset_controls(&self) {
+        self.shared.commands.lock().unwrap().push(Command::ResetControls);
     }
 }
 

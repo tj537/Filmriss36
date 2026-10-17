@@ -6,6 +6,8 @@ highlights = -0.1
 fade = 0.04
 saturation = 0.15
 grain = 0.15
+grain_roughness = 0.4
+grain_chroma = 0.3
 
 [hues.orange]
 saturation = 0.15

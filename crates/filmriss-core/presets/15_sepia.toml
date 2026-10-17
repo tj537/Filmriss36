@@ -4,8 +4,10 @@ monochrome = true
 contrast = 0.1
 highlights = -0.1
 fade = 0.15
-grain = 0.25
 vignette = 0.3
+grain = 0.25
+grain_size = 2.0
+grain_roughness = 0.5
 
 [shadow_tone]
 hue = 50.0

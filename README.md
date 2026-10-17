@@ -7,7 +7,9 @@ Runs on macOS, Linux (including Raspberry Pi) and Windows; Android is prepared.
 - **15 built-in simulations** inspired by classic film stocks (slide, negative, cinema, black & white …)
 - **Custom simulations**: recipe editor with live preview, saved as readable TOML
 - **Import `.cube` LUTs** (just drop them into the LUT folder) and **export** them (for Lightroom, Resolve & co.)
-- **Grain & vignette** like real film, identical in preview and photo
+- **Film grain per simulation**: amount, size, roughness and color grain – resolution-independent, identical in preview and photo, with a quick grain slider next to the shutter
+- **Full sensor resolution photos**: the preview runs smoothly at ~1080p, the shutter grabs the camera's largest format
+- **Exposure modes AUTO / A / M**: exposure compensation and white balance everywhere, plus the camera's hardware controls in M (where the camera exposes them)
 - **Touch and mouse**: swipe to switch, hold for before/after, large controls
 
 > Status: early development version. Primary test target is macOS.
@@ -39,8 +41,39 @@ On first launch macOS asks for **camera access** – the permission applies to t
 | Split view | "◑ Compare" | "◑ Compare" | S |
 | Hide UI | double-click | double-tap | H |
 | Technical info (FPS, format, GPU) | "ℹ Info" | | I |
+| Exposure mode AUTO / A / M | mode buttons next to the shutter | same | E |
 
-Photos are saved as JPEG to `~/Pictures/Filmriss/` (optionally together with the original).
+Photos are saved as JPEG to `~/Pictures/Filmriss/` at full sensor resolution (optionally together with the
+original). Switch to *preview resolution* in the Camera tab if you prefer instant captures.
+
+## Exposure modes
+
+Laptop and phone cameras have a fixed aperture, so the modes work like this:
+
+| Mode | What you control |
+|---|---|
+| **AUTO** | nothing – the camera handles exposure and white balance |
+| **A** | the camera keeps auto-exposing; you set exposure compensation (EV) and white balance |
+| **M** | like A, plus every hardware control the camera reports (exposure time, gain/ISO, focus, white balance …) |
+
+EV and white balance are applied digitally in linear light before the film look, so they work on every
+camera. Hardware controls depend on the platform: Linux/Raspberry Pi (V4L2) usually exposes a lot, **Mac
+cameras expose almost nothing** (Apple doesn't allow manual shutter/ISO there), Android will get full
+manual control via Camera2. The built-in test pattern simulates exposure time and gain so M mode can be
+tried without hardware.
+
+## Film grain
+
+Every simulation has its own grain settings (Recipe tab → *Grain*):
+
+| Parameter | Meaning |
+|---|---|
+| `grain` | amount, 0 … 1 (quick presets: Off / Weak / Strong) |
+| `grain_size` | size in 1080p pixels, scales with the image so preview and 4K photo match (Small / Large) |
+| `grain_roughness` | 0 = soft, round grain · 1 = crisp, crunchy grain |
+| `grain_chroma` | 0 = monochrome grain (B&W film) · 1 = colored grain (color negative) |
+
+The *Grain* slider next to the shutter changes the amount of the current simulation directly.
 
 ## Custom film simulations
 
@@ -58,6 +91,8 @@ contrast = 0.1
 fade = 0.1
 saturation = 0.1
 grain = 0.25
+grain_roughness = 0.4
+grain_chroma = 0.3
 
 [hues.orange]          # skin tones
 lightness = 0.1

@@ -106,8 +106,16 @@ impl Simulation {
             intensity,
             grain: self.recipe.grain,
             grain_size: self.recipe.grain_size,
+            grain_roughness: self.recipe.grain_roughness,
+            // Colored grain makes no sense on black & white film.
+            grain_chroma: if self.recipe.monochrome {
+                0.0
+            } else {
+                self.recipe.grain_chroma
+            },
             vignette: self.recipe.vignette,
             seed,
+            pre_gain: [1.0; 3],
         }
     }
 }

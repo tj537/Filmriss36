@@ -37,6 +37,15 @@ for each of 2 million pixels.
 - **Memory**: frame buffers are recycled (pool), no 8 MB allocation per frame.
 - **Repaint only when needed**: the camera thread wakes egui via `request_repaint()`; without
   new frames the app sleeps.
+- **Full-resolution stills**: the UI sends a `CaptureStill` command to the capture thread. The
+  nokhwa backend stops the stream, switches to the largest decodable format, discards a few frames
+  so exposure settles, grabs one frame and switches back to the preview format. If the preview already
+  runs at the maximum resolution, the next frame is used directly. On error or timeout the app falls
+  back to the preview frame. (On Android this becomes a separate still `ImageReader` – no switching.)
+- **Camera controls**: backends report their hardware controls in a generic form
+  (`HwControl`: int/float range, bool, choice) and the UI renders them in M mode. Setting a value is a
+  command to the capture thread. Some nokhwa backends `todo!()` instead of erroring, so control calls are
+  wrapped in `catch_unwind`.
 - **Preview = photo**: `filmriss_core::process::shade` and `preview.wgsl` implement the same
   formulas (including an identical integer hash for the grain). The saved photo looks like the preview.
 
@@ -80,6 +89,20 @@ Order in `FilmRecipe::apply` (input/output: sRGB-encoded, like camera frames):
 
 Grain and vignette are part of the recipe but are *not* baked into the LUT (they depend on the
 pixel position); they are computed in the shader.
+
+Before the LUT, the shader applies the **camera gains** of modes A/M (exposure compensation and white
+balance, in linear light). They belong to the capture, not to the look – like on a real camera.
+
+### Grain
+
+Grain is two octaves of value noise driven by an integer hash, identical on GPU and CPU:
+- `grain_roughness` blends in the finer octave (soft, round → crisp, crunchy),
+- `grain_chroma` mixes three independent per-channel fields into the monochrome one,
+- the amplitude peaks in the midtones and falls off towards shadows/highlights,
+- the size is given in 1080p pixels and scaled by `height / 1080`, so a 1080p preview and a 4K photo
+  show the same grain relative to the picture,
+- the seed changes every preview frame (moving grain like film projection); the photo uses the seed of
+  the frame that was on screen when the shutter was pressed.
 
 The built-in looks are our own interpretations. Fujifilm's simulation names are trademarks and
 the original LUTs are not public – hence our own names with "cf. …" in the description.

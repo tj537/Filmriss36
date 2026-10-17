@@ -17,9 +17,7 @@
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-use crate::color::{
-    linear_srgb_to_oklab, linear_to_srgb3, luminance, mix, oklab_to_linear_srgb, smoothstep, srgb_to_linear3,
-};
+use crate::color::{linear_srgb_to_oklab, linear_to_srgb3, mix, oklab_to_linear_srgb, smoothstep, srgb_to_linear3};
 use crate::lut::Lut3D;
 
 /// Oklab lightness of 18% gray – pivot of the contrast curve.
@@ -69,8 +67,13 @@ pub struct FilmRecipe {
 
     /// Film grain strength 0 … 1 (generated live in the shader, not in the LUT).
     pub grain: f32,
-    /// Grain size in camera pixels (1 = fine, 3 = coarse).
+    /// Grain size in 1080p pixels (1 = fine, 3 = coarse) – scales with the image height,
+    /// so preview and full-resolution photo look the same.
     pub grain_size: f32,
+    /// 0 = soft, round grain; 1 = crisp, crunchy grain.
+    pub grain_roughness: f32,
+    /// 0 = monochrome grain (like B&W film); 1 = colored grain (like color negative film).
+    pub grain_chroma: f32,
     /// Vignette: + darker corners, − brighter corners. Range −1 … 1 (shader).
     pub vignette: f32,
 }
@@ -96,6 +99,8 @@ impl Default for FilmRecipe {
             highlight_tone: Tone::default(),
             grain: 0.0,
             grain_size: 1.5,
+            grain_roughness: 0.5,
+            grain_chroma: 0.0,
             vignette: 0.0,
         }
     }
@@ -230,15 +235,9 @@ impl FilmRecipe {
         let mut lin = srgb_to_linear3(srgb);
 
         // 1) Exposure + white balance (linear, like in the camera)
-        let ev = 2f32.powf(self.exposure);
-        let gains = [
-            (0.18 * self.temperature).exp(),
-            (-0.12 * self.tint).exp(),
-            (-0.18 * self.temperature).exp(),
-        ];
-        let norm = 1.0 / luminance(gains);
+        let gains = crate::process::camera_gains(self.exposure, self.temperature, self.tint);
         for i in 0..3 {
-            lin[i] *= ev * gains[i] * norm;
+            lin[i] *= gains[i];
         }
 
         // 2) Black & white: channel mixer (color filter effect)

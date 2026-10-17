@@ -26,7 +26,14 @@ impl Thumbnails {
         self.textures.get(i)
     }
 
-    pub fn update(&mut self, ctx: &egui::Context, now: f64, frame: Option<&PreviewFrame>, sims: &[Simulation]) {
+    pub fn update(
+        &mut self,
+        ctx: &egui::Context,
+        now: f64,
+        frame: Option<&PreviewFrame>,
+        sims: &[Simulation],
+        pre_gain: [f32; 3],
+    ) {
         let Some(frame) = frame else { return };
         let stale = now - self.last_update > REFRESH_SECS || self.textures.len() != sims.len();
         if !(stale || self.dirty) {
@@ -46,6 +53,7 @@ impl Thumbnails {
             // Grain would just be noise at this size – vignette and colors are enough.
             let params = LookParams {
                 grain: 0.0,
+                pre_gain,
                 ..sim.look_params(1.0, 0)
             };
             process::render_rgba8(&mut img, THUMB_W, th, &sim.lut, &params);

@@ -23,8 +23,11 @@ use egui::{
     Align, Align2, Color32, CornerRadius, FontId, Key, Margin, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind,
     Ui, Vec2,
 };
-use filmriss_camera::{CameraDescriptor, CameraId, CameraStream, Notify, StreamState};
-use filmriss_core::{FilmRecipe, Library, Origin, Paths};
+use filmriss_camera::{
+    CameraDescriptor, CameraId, CameraStream, HwControl, HwControlKind, HwValue, Notify, StreamState,
+};
+use filmriss_core::process::camera_gains;
+use filmriss_core::{FilmRecipe, Library, LookParams, Lut3D, Origin, Paths};
 
 use crate::capture::{self, CaptureJob, CaptureResult};
 use crate::preview::{PreviewCallback, PreviewFrame, PreviewResources, Uniforms};
@@ -50,6 +53,48 @@ struct Settings {
     show_info: bool,
     save_original: bool,
     panel_open: bool,
+    /// Photos at the camera's full sensor resolution (otherwise: the preview frame).
+    full_res_photos: bool,
+    mode: ExposureMode,
+    /// Digital exposure compensation in EV (modes A and M).
+    ev: f32,
+    /// Digital white balance shift (modes A and M), −1 … 1.
+    wb_temperature: f32,
+    wb_tint: f32,
+}
+
+/// Exposure modes. Phone and laptop cameras have a fixed aperture, so "A" here means
+/// "semi-automatic": the camera keeps auto-exposing and you steer exposure compensation
+/// and white balance. "M" additionally exposes the camera's hardware controls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+enum ExposureMode {
+    #[default]
+    Auto,
+    A,
+    M,
+}
+
+impl ExposureMode {
+    const ALL: [Self; 3] = [Self::Auto, Self::A, Self::M];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "AUTO",
+            Self::A => "A",
+            Self::M => "M",
+        }
+    }
+
+    fn help(self) -> &'static str {
+        match self {
+            Self::Auto => "Automatic: the camera decides exposure and white balance.",
+            Self::A => "Semi-automatic: auto exposure plus your exposure compensation and white balance.",
+            Self::M => {
+                "Manual: like A, plus the camera's hardware controls (exposure time, gain/ISO, focus …) \
+                        as far as the camera exposes them."
+            }
+        }
+    }
 }
 
 impl Default for Settings {
@@ -62,6 +107,11 @@ impl Default for Settings {
             show_info: false,
             save_original: false,
             panel_open: true,
+            full_res_photos: true,
+            mode: ExposureMode::Auto,
+            ev: 0.0,
+            wb_temperature: 0.0,
+            wb_tint: 0.0,
         }
     }
 }
@@ -96,6 +146,14 @@ impl Rate {
     }
 }
 
+/// A photo waiting for its full-resolution frame from the camera.
+struct PendingStill {
+    lut: Arc<Lut3D>,
+    params: LookParams,
+    simulation: String,
+    since: f64,
+}
+
 pub struct FilmrissApp {
     settings: Settings,
     paths: Option<Paths>,
@@ -125,6 +183,7 @@ pub struct FilmrissApp {
     capture_tx: mpsc::Sender<CaptureResult>,
     capture_rx: mpsc::Receiver<CaptureResult>,
     captures_pending: usize,
+    pending_still: Option<PendingStill>,
     flash_at: Option<f64>,
 
     toasts: Vec<Toast>,
@@ -211,6 +270,7 @@ impl FilmrissApp {
             capture_tx,
             capture_rx,
             captures_pending: 0,
+            pending_still: None,
             flash_at: None,
             toasts: Vec::new(),
             swipe: Vec2::ZERO,
@@ -405,37 +465,123 @@ impl FilmrissApp {
 
     // ── Capture ──────────────────────────────────────────────────────────────
 
+    /// Linear gains of the digital exposure compensation / white balance (modes A and M).
+    fn pre_gain(&self) -> [f32; 3] {
+        match self.settings.mode {
+            ExposureMode::Auto => [1.0; 3],
+            ExposureMode::A | ExposureMode::M => {
+                camera_gains(self.settings.ev, self.settings.wb_temperature, self.settings.wb_tint)
+            }
+        }
+    }
+
+    fn look_params(&self, seed: u32) -> LookParams {
+        let sim = &self.library.simulations[self.current];
+        LookParams {
+            pre_gain: self.pre_gain(),
+            ..sim.look_params(self.settings.intensity, seed)
+        }
+    }
+
     fn capture(&mut self, ctx: &egui::Context, now: f64) {
+        if self.pending_still.is_some() {
+            return;
+        }
         let Some(frame) = &self.frame else {
             self.toast("No camera frame yet".into(), true, now);
             return;
         };
+        let sim = &self.library.simulations[self.current];
+        // Same seed as the preview → identical grain
+        let params = self.look_params(frame.id as u32);
+        let pending = PendingStill {
+            lut: sim.lut.clone(),
+            params,
+            simulation: sim.name().to_owned(),
+            since: now,
+        };
+        self.flash_at = Some(now);
+        match &self.stream {
+            Some(stream) if self.settings.full_res_photos => {
+                stream.request_still();
+                self.pending_still = Some(pending);
+            }
+            _ => {
+                let frame = frame.frame.clone();
+                self.spawn_capture(pending, frame, ctx, now);
+            }
+        }
+    }
+
+    /// Waits for the full-resolution frame; falls back to the preview frame on error/timeout.
+    fn poll_still(&mut self, ctx: &egui::Context, now: f64) {
+        let Some(pending) = &self.pending_still else { return };
+        let result = self.stream.as_ref().and_then(|s| s.take_still());
+        let frame = match result {
+            Some(Ok(still)) => Some(Arc::new(still)),
+            Some(Err(e)) => {
+                self.toast(
+                    format!("Full-resolution capture failed ({e}) – saving the preview frame"),
+                    true,
+                    now,
+                );
+                None
+            }
+            None if now - pending.since > 8.0 || self.stream.is_none() => {
+                self.toast(
+                    "Full-resolution capture timed out – saving the preview frame".into(),
+                    true,
+                    now,
+                );
+                None
+            }
+            None => {
+                ctx.request_repaint_after(Duration::from_millis(30));
+                return;
+            }
+        };
+        let pending = self.pending_still.take().unwrap();
+        match frame.or_else(|| self.frame.as_ref().map(|f| f.frame.clone())) {
+            Some(frame) => self.spawn_capture(pending, frame, ctx, now),
+            None => self.toast("No camera frame to save".into(), true, now),
+        }
+    }
+
+    fn spawn_capture(&mut self, p: PendingStill, frame: Arc<filmriss_camera::Frame>, ctx: &egui::Context, now: f64) {
         let Some(paths) = &self.paths else {
             self.toast("No storage location available".into(), true, now);
             return;
         };
-        let sim = &self.library.simulations[self.current];
         let job = CaptureJob {
-            frame: frame.frame.clone(),
-            lut: sim.lut.clone(),
-            // Same seed as the preview → identical grain
-            params: sim.look_params(self.settings.intensity, frame.id as u32),
-            simulation: sim.name().to_owned(),
+            frame,
+            lut: p.lut,
+            params: p.params,
+            simulation: p.simulation,
             dir: paths.captures.clone(),
             save_original: self.settings.save_original,
         };
         capture::spawn(job, self.capture_tx.clone(), ctx.clone());
         self.captures_pending += 1;
-        self.flash_at = Some(now);
+    }
+
+    fn set_mode(&mut self, mode: ExposureMode) {
+        if self.settings.mode == ExposureMode::M
+            && mode != ExposureMode::M
+            && let Some(stream) = &self.stream
+        {
+            // Leaving manual mode: hand control back to the camera's automatics.
+            stream.reset_controls();
+        }
+        self.settings.mode = mode;
     }
 
     fn poll_captures(&mut self, now: f64) {
         while let Ok(result) = self.capture_rx.try_recv() {
             self.captures_pending = self.captures_pending.saturating_sub(1);
             match result {
-                Ok(path) => {
+                Ok((path, w, h)) => {
                     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                    self.toast(format!("📷 {name}"), false, now);
+                    self.toast(format!("📷 {name}  ·  {w}×{h}"), false, now);
                 }
                 Err(e) => self.toast(format!("Photo failed: {e}"), true, now),
             }
@@ -466,7 +612,7 @@ impl FilmrissApp {
         }
         // Arrows/Space/Enter belong to the app: consume them so egui doesn't move focus
         // with them or trigger a focused button a second time.
-        let (prev, next, shoot, info, split, mirror, hide, panel, full, compare) = ctx.input_mut(|i| {
+        let (prev, next, shoot, info, split, mirror, hide, panel, full, compare, mode) = ctx.input_mut(|i| {
             let none = egui::Modifiers::NONE;
             (
                 i.consume_key(none, Key::ArrowLeft),
@@ -479,8 +625,17 @@ impl FilmrissApp {
                 i.key_pressed(Key::P),
                 i.key_pressed(Key::F),
                 i.key_down(Key::C),
+                i.key_pressed(Key::E),
             )
         });
+        if mode {
+            let next = match self.settings.mode {
+                ExposureMode::Auto => ExposureMode::A,
+                ExposureMode::A => ExposureMode::M,
+                ExposureMode::M => ExposureMode::Auto,
+            };
+            self.set_mode(next);
+        }
         if prev {
             self.step(-1, now);
         }
@@ -521,10 +676,12 @@ impl eframe::App for FilmrissApp {
 
         self.ensure_camera(&ctx, now);
         self.poll_camera(now);
+        self.poll_still(&ctx, now);
         self.poll_captures(now);
         self.handle_keys(&ctx, now);
+        let pre_gain = self.pre_gain();
         self.thumbs
-            .update(&ctx, now, self.frame.as_ref(), &self.library.simulations);
+            .update(&ctx, now, self.frame.as_ref(), &self.library.simulations, pre_gain);
         self.toasts.retain(|t| t.until > now);
         if let Some(t) = self.toasts.iter().map(|t| t.until).reduce(f64::min) {
             ctx.request_repaint_after(Duration::from_secs_f64((t - now).max(0.0)));
@@ -630,21 +787,21 @@ impl FilmrissApp {
         // Narrow (phone portrait): strength slider on its own row above the shutter
         let narrow = ui.available_width() < 560.0;
         if narrow {
-            self.intensity_slider(ui);
+            self.quick_sliders(ui);
         }
         ui.columns(3, |cols| {
             if !narrow {
-                cols[0].with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                    self.intensity_slider(ui)
-                });
+                cols[0].vertical(|ui| self.quick_sliders(ui));
             }
             cols[1].vertical_centered(|ui| {
-                if shutter_button(ui, self.captures_pending > 0).clicked() {
+                let busy = self.captures_pending > 0 || self.pending_still.is_some();
+                if shutter_button(ui, busy).clicked() {
                     let ctx = ui.ctx().clone();
                     self.capture(&ctx, now);
                 }
             });
-            cols[2].with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+            cols[2].with_layout(egui::Layout::top_down(Align::Max), |ui| {
+                self.mode_selector(ui);
                 let resp = ui.add(egui::Button::new("👁 Before").sense(Sense::click_and_drag()));
                 let resp = resp.on_hover_text("Hold to show the original (key C)");
                 if resp.is_pointer_button_down_on() {
@@ -652,6 +809,80 @@ impl FilmrissApp {
                 }
             });
         });
+        if self.settings.mode != ExposureMode::Auto {
+            ui.horizontal_wrapped(|ui| self.exposure_sliders(ui, false));
+        }
+    }
+
+    /// Strength of the look and grain of the current simulation – always at hand.
+    fn quick_sliders(&mut self, ui: &mut Ui) {
+        self.intensity_slider(ui);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Grain   ").color(TEXT_DIM));
+            ui.style_mut().spacing.slider_width = (ui.available_width() - 80.0).clamp(60.0, 220.0);
+            let grain = &mut self.library.simulations[self.current].recipe.grain;
+            let resp = ui
+                .add(egui::Slider::new(grain, 0.0..=1.0).fixed_decimals(2))
+                .on_hover_text("Grain of this simulation – size, roughness and color in the Recipe tab");
+            if resp.double_clicked() {
+                *grain = self.pristine[self.current].grain;
+            }
+        });
+    }
+
+    fn mode_selector(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            // In right-aligned layouts egui fills from the right – keep AUTO · A · M readable.
+            let mut modes = ExposureMode::ALL;
+            if ui.layout().prefer_right_to_left() {
+                modes.reverse();
+            }
+            for mode in modes {
+                let selected = self.settings.mode == mode;
+                let text = RichText::new(mode.label()).strong();
+                if ui.selectable_label(selected, text).on_hover_text(mode.help()).clicked() {
+                    self.set_mode(mode);
+                }
+            }
+        });
+    }
+
+    /// Digital exposure compensation and white balance (modes A and M).
+    fn exposure_sliders(&mut self, ui: &mut Ui, with_tint: bool) {
+        let s = &mut self.settings;
+        let ev = ui
+            .add(
+                egui::Slider::new(&mut s.ev, -2.0..=2.0)
+                    .step_by(1.0 / 3.0)
+                    .fixed_decimals(1)
+                    .text("EV"),
+            )
+            .on_hover_text("Exposure compensation – double-click resets");
+        if ev.double_clicked() {
+            s.ev = 0.0;
+        }
+        let wb = ui
+            .add(
+                egui::Slider::new(&mut s.wb_temperature, -1.0..=1.0)
+                    .fixed_decimals(2)
+                    .text("WB"),
+            )
+            .on_hover_text("White balance: − cooler, + warmer – double-click resets");
+        if wb.double_clicked() {
+            s.wb_temperature = 0.0;
+        }
+        if with_tint {
+            let tint = ui
+                .add(
+                    egui::Slider::new(&mut s.wb_tint, -1.0..=1.0)
+                        .fixed_decimals(2)
+                        .text("Tint"),
+                )
+                .on_hover_text("− green, + magenta – double-click resets");
+            if tint.double_clicked() {
+                s.wb_tint = 0.0;
+            }
+        }
     }
 
     fn intensity_slider(&mut self, ui: &mut Ui) {
@@ -806,21 +1037,9 @@ impl FilmrissApp {
         }
 
         // ── GPU preview ──
+        let mirror = self.settings.mirror && !self.is_test_pattern();
+        let uniforms = Uniforms::from_look(&self.look_params(frame.id as u32), split, mirror);
         let sim = &self.library.simulations[self.current];
-        let uniforms = Uniforms {
-            intensity: self.settings.intensity,
-            grain: sim.recipe.grain,
-            grain_size: sim.recipe.grain_size,
-            vignette: sim.recipe.vignette,
-            split,
-            mirror: if self.settings.mirror && !self.is_test_pattern() {
-                1.0
-            } else {
-                0.0
-            },
-            seed: frame.id as u32,
-            ..Default::default()
-        };
         painter.add(egui_wgpu::Callback::new_paint_callback(
             rect,
             PreviewCallback {
@@ -882,6 +1101,15 @@ impl FilmrissApp {
             ui.ctx().request_repaint();
         }
 
+        if self.pending_still.is_some() {
+            label(
+                &painter,
+                rect.center_bottom() - Vec2::new(0.0, 16.0),
+                Align2::CENTER_BOTTOM,
+                "Capturing at full resolution …",
+            );
+        }
+
         if self.settings.show_info {
             let f = &frame.frame;
             let cam = self
@@ -894,7 +1122,7 @@ impl FilmrissApp {
                 _ => String::new(),
             };
             let text = format!(
-                "{cam}  ·  {}×{}  {fmt}\nCamera {} fps  ·  UI {} fps\nGPU {}\nLUT {}³  ·  Frame #{}",
+                "{cam}  ·  {}×{}  {fmt}\nCamera {} fps  ·  UI {} fps\nGPU {}\nLUT {}³  ·  Frame #{}\nMode {}  ·  {:+.1} EV",
                 f.width,
                 f.height,
                 self.cam_rate.per_sec(),
@@ -902,6 +1130,12 @@ impl FilmrissApp {
                 self.gpu_info,
                 sim.lut.size(),
                 frame.id,
+                self.settings.mode.label(),
+                if self.settings.mode == ExposureMode::Auto {
+                    0.0
+                } else {
+                    self.settings.ev
+                },
             );
             let galley = painter.layout_no_wrap(text, FontId::monospace(12.0), Color32::from_gray(230));
             let bg = Rect::from_min_size(rect.min + Vec2::splat(10.0), galley.size() + Vec2::splat(16.0));
@@ -1124,6 +1358,54 @@ impl FilmrissApp {
             ui.label(RichText::new(format!("Status: {state}")).color(TEXT_DIM));
         }
         ui.checkbox(&mut self.settings.mirror, "Mirror preview (selfie)");
+
+        ui.add_space(10.0);
+        ui.label(RichText::new("Photo resolution").strong());
+        ui.radio_value(&mut self.settings.full_res_photos, true, "Full sensor resolution")
+            .on_hover_text("The camera briefly switches to its largest format for the photo");
+        ui.radio_value(
+            &mut self.settings.full_res_photos,
+            false,
+            "Preview resolution (instant)",
+        );
+
+        ui.add_space(10.0);
+        ui.label(RichText::new("Exposure mode").strong());
+        self.mode_selector(ui);
+        ui.label(RichText::new(self.settings.mode.help()).color(TEXT_DIM).small());
+        if self.settings.mode != ExposureMode::Auto {
+            ui.add_space(4.0);
+            self.exposure_sliders(ui, true);
+        }
+        if self.settings.mode == ExposureMode::M {
+            ui.add_space(8.0);
+            ui.label(RichText::new("Hardware controls").strong());
+            self.hardware_controls(ui);
+        }
+    }
+
+    fn hardware_controls(&mut self, ui: &mut Ui) {
+        let Some(stream) = &self.stream else { return };
+        let controls = stream.controls();
+        if controls.is_empty() {
+            ui.label(
+                RichText::new(
+                    "This camera exposes no manual controls. (Apple does not allow manual shutter/ISO \
+                     for Mac cameras.) Exposure compensation and white balance above still work.",
+                )
+                .color(TEXT_DIM)
+                .small(),
+            );
+            return;
+        }
+        for c in &controls {
+            if let Some(value) = hw_control_ui(ui, c) {
+                stream.set_control(c.id, value);
+            }
+        }
+        if ui.button("↺ Back to camera automatic").clicked() {
+            stream.reset_controls();
+        }
     }
 
     fn tab_help(&mut self, ui: &mut Ui) {
@@ -1149,6 +1431,7 @@ impl FilmrissApp {
                     ("S", "Split view"),
                     ("I", "Technical info"),
                     ("M", "Mirror"),
+                    ("E", "Cycle AUTO / A / M"),
                     ("P", "Side panel"),
                     ("H", "Hide everything"),
                     ("F", "Fullscreen"),
@@ -1198,6 +1481,47 @@ fn shutter_button(ui: &mut Ui, busy: bool) -> egui::Response {
     };
     painter.circle_filled(c, inner, fill);
     resp.on_hover_text("Take photo (Space)")
+}
+
+/// Generic widget for a camera-reported control; returns a new value when changed.
+fn hw_control_ui(ui: &mut Ui, c: &HwControl) -> Option<HwValue> {
+    ui.add_enabled_ui(!c.read_only, |ui| match &c.kind {
+        HwControlKind::Int {
+            min, max, step, value, ..
+        } => {
+            let mut v = *value;
+            let slider = egui::Slider::new(&mut v, *min..=*max)
+                .step_by(*step as f64)
+                .text(&c.name);
+            ui.add(slider).changed().then_some(HwValue::Int(v))
+        }
+        HwControlKind::Float {
+            min, max, step, value, ..
+        } => {
+            let mut v = *value;
+            let mut slider = egui::Slider::new(&mut v, *min..=*max).text(&c.name);
+            if *step > 0.0 {
+                slider = slider.step_by(*step);
+            }
+            ui.add(slider).changed().then_some(HwValue::Float(v))
+        }
+        HwControlKind::Bool { value, .. } => {
+            let mut v = *value;
+            ui.checkbox(&mut v, &c.name).changed().then_some(HwValue::Bool(v))
+        }
+        HwControlKind::Choice { value, options, .. } => {
+            let mut v = *value;
+            egui::ComboBox::from_label(&c.name)
+                .selected_text(v.to_string())
+                .show_ui(ui, |ui| {
+                    for o in options {
+                        ui.selectable_value(&mut v, *o, o.to_string());
+                    }
+                });
+            (v != *value).then_some(HwValue::Choice(v))
+        }
+    })
+    .inner
 }
 
 fn label(painter: &egui::Painter, pos: egui::Pos2, align: Align2, text: &str) {

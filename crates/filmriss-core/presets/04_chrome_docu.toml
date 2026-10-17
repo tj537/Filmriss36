@@ -5,6 +5,8 @@ highlights = -0.15
 shadows = -0.3
 saturation = -0.3
 grain = 0.15
+grain_roughness = 0.6
+grain_chroma = 0.1
 
 [hues.red]
 hue = 6.0
